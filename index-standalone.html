@@ -1,0 +1,2752 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>THE IMPOSTOR — 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* THE IMPOSTOR — style.css
+   Full UI/HUD stylesheet for index.html (loaded via <link>; also inlined
+   into index-standalone.html by build-standalone.py). */
+
+  :root{
+    --bg:#050508; --player-tint:#e8f4f8;
+    --impostor-glow:#ff1a3c; --ui-green:#00ff88; --ui-yellow:#ffe44d; --ui-red:#ff1a3c;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
+  body{font-family:'Space Grotesk',sans-serif;color:var(--player-tint);cursor:none;}
+  #game-container{position:fixed;inset:0;z-index:1;}
+  #game-container canvas{display:block;}
+  #webcam-video{display:none;}
+
+  /* css post fx */
+  #scanCSS{position:fixed;inset:0;z-index:50;pointer-events:none;
+    background:repeating-linear-gradient(0deg,rgba(0,255,136,0.045) 0 1px,transparent 1px 4px);
+    mix-blend-mode:screen;animation:scandrift 14s linear infinite;}
+  @keyframes scandrift{from{transform:translateY(0);}to{transform:translateY(120px);}}
+  #vigCSS{position:fixed;inset:0;z-index:51;pointer-events:none;
+    background:radial-gradient(ellipse at 50% 46%,transparent 52%,rgba(0,0,0,0.55) 84%,rgba(0,0,0,0.88) 100%);}
+  #xhair{position:fixed;z-index:60;width:18px;height:18px;left:0;top:0;pointer-events:none;
+    transform:translate(-50%,-50%);}
+  #xhair::before,#xhair::after{content:"";position:absolute;background:rgba(232,244,248,0.85);}
+  #xhair::before{left:8px;top:0;width:1.5px;height:18px;
+    clip-path:polygon(0 0,100% 0,100% 6px,0 6px,0 12px,100% 12px,100% 100%,0 100%);}
+  #xhair::after{left:0;top:8px;width:18px;height:1.5px;
+    clip-path:polygon(0 0,6px 0,6px 100%,0 100%,12px 0,100% 0,100% 100%,12px 100%);}
+
+  /* world-space HUD (projected) */
+  #world-hud{position:fixed;inset:0;z-index:55;pointer-events:none;overflow:hidden;}
+  .hbar{position:absolute;width:46px;height:4px;background:rgba(0,0,0,0.65);
+    border:1px solid rgba(138,138,200,0.5);transform:translate(-50%,-50%);}
+  .hbar i{display:block;height:100%;background:#8a8ac8;}
+  .hbar.hunter i{background:#ff5a7a;}
+  #impbar{position:absolute;width:64px;height:5px;background:rgba(0,0,0,0.7);
+    border:1px solid rgba(255,26,60,0.8);transform:translate(-50%,-50%);display:none;}
+  #impbar i{display:block;height:100%;background:var(--ui-red);}
+  #impbar.enraged{border-color:var(--ui-red);box-shadow:0 0 14px rgba(255,26,60,0.65);
+    animation:impbar-rage .5s ease-in-out infinite alternate;}
+  @keyframes impbar-rage{from{transform:translate(-50%,-50%) scale(1);}to{transform:translate(-50%,-50%) scale(1.12);}}
+  #predlabel{position:absolute;transform:translate(-50%,-100%);display:none;text-align:center;
+    font-family:'Space Mono',monospace;border:1px solid var(--ui-yellow);padding:5px 10px;
+    background:rgba(0,0,0,0.78);white-space:nowrap;}
+  #predlabel .a{font-size:9px;letter-spacing:0.14em;color:var(--ui-yellow);}
+  #predlabel .b{font-size:13px;font-weight:700;color:#fff;margin-top:2px;}
+  #predlabel .b:empty{display:none;}
+
+  /* ---------- behavioral profile panel ---------- */
+  #profile-panel{
+    position:absolute;top:20px;right:20px;
+    background:rgba(0,0,0,0.85);border:1px solid rgba(0,255,136,0.3);
+    padding:12px 16px;font-family:'Space Mono',monospace;font-size:11px;color:var(--ui-green);
+    min-width:230px;z-index:100;user-select:none;pointer-events:none;}
+  .panel-header{font-size:10px;letter-spacing:0.15em;color:rgba(0,255,136,0.5);
+    margin-bottom:10px;font-family:'Space Grotesk',sans-serif;font-weight:600;}
+  .panel-line{margin:5px 0;overflow:hidden;display:flex;justify-content:space-between;gap:10px;}
+  .label{color:rgba(0,255,136,0.5);flex:none;}
+  .value{color:var(--ui-green);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;}
+  .confidence-bar{width:100%;height:3px;background:rgba(0,255,136,0.15);margin-top:6px;}
+  .confidence-fill{height:100%;background:var(--ui-green);transition:width 0.5s ease;width:0%;}
+  #pattern-log{margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,255,136,0.15);
+    font-size:10px;color:var(--ui-yellow);min-height:14px;letter-spacing:0.05em;}
+
+  /* ---------- hud ---------- */
+  #round-hud{position:absolute;top:20px;left:50%;transform:translateX(-50%);
+    font-family:'Space Mono',monospace;font-size:12px;letter-spacing:0.2em;
+    color:rgba(232,244,248,0.55);z-index:100;user-select:none;pointer-events:none;text-align:center;}
+  #round-hud .big{color:var(--player-tint);font-weight:700;}
+  #sys-note{position:absolute;bottom:16px;left:20px;font-family:'Space Mono',monospace;
+    font-size:10px;letter-spacing:0.15em;color:rgba(0,255,136,0.55);z-index:100;
+    user-select:none;pointer-events:none;}
+  #hp-wrap{position:absolute;bottom:0;left:0;width:100%;height:4px;
+    background:rgba(255,255,255,0.06);z-index:100;pointer-events:none;}
+  #hp-fill{height:100%;width:100%;background:var(--ui-green);transition:width .15s ease, background .3s ease;}
+
+  /* stress vignette: red edge pulse when the player is actually stressed */
+  #stress-vign{position:fixed;inset:0;pointer-events:none;z-index:50;opacity:0;
+    box-shadow:inset 0 0 140px 50px rgba(255,26,60,0.55);
+    transition:opacity .3s ease;}
+
+  /* subject cam: live face + expression + vital monitoring */
+  #cam-box{position:absolute;bottom:22px;left:20px;width:180px;z-index:100;
+    background:rgba(0,0,0,0.72);border:1px solid rgba(0,255,136,0.35);
+    font-family:'Space Mono',monospace;color:var(--ui-green);
+    padding:7px 8px 8px;user-select:none;pointer-events:none;transition:border-color .4s ease;}
+  #cam-box.stress-hi{border-color:var(--ui-red);box-shadow:0 0 18px rgba(255,26,60,0.35);}
+  #cam-box.stress-mid{border-color:var(--ui-yellow);}
+  .cb-hdr{font-size:8.5px;letter-spacing:0.22em;color:rgba(0,255,136,0.55);
+    margin-bottom:5px;display:flex;justify-content:space-between;}
+  .cb-hdr #cb-state{color:var(--ui-green);}
+  .cb-vid{position:relative;width:164px;height:96px;overflow:hidden;background:#04070a;}
+  .cb-vid video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1);filter:saturate(0.75) contrast(1.1);}
+  .cb-vid .cb-nosignal{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:8.5px;letter-spacing:0.25em;color:rgba(0,255,136,0.4);text-align:center;line-height:1.7;
+    background:repeating-linear-gradient(0deg,rgba(0,255,136,0.03) 0 1px,transparent 1px 3px);}
+  .cb-aine{position:absolute;left:0;right:0;height:1.5px;background:rgba(0,255,136,0.5);opacity:0.8;
+    animation:cbscan 2.6s linear infinite;}
+  @keyframes cbscan{0%{top:0;}50%{top:calc(100% - 1px);}100%{top:0;}}
+  .cb-row{display:flex;align-items:center;gap:6px;margin-top:6px;font-size:9.5px;letter-spacing:0.08em;}
+  .cb-row #expr-emoji{font-size:13px;line-height:1;}
+  #expr-text{color:var(--ui-green);white-space:nowrap;}
+  .cb-stress-row{display:flex;align-items:center;gap:5px;margin-top:5px;font-size:8.5px;
+    letter-spacing:0.14em;color:rgba(0,255,136,0.6);}
+  .cb-bar{flex:1;height:5px;background:rgba(255,255,255,0.07);position:relative;overflow:hidden;}
+  #stress-fill{position:absolute;left:0;top:0;bottom:0;width:0%;background:var(--ui-green);
+    transition:width .25s ease, background .3s ease;}
+  #stress-pct{width:30px;text-align:right;color:var(--ui-green);}
+  #hit-flash{position:fixed;inset:0;background:var(--ui-red);opacity:0;pointer-events:none;
+    z-index:150;transition:opacity .25s ease;}
+
+  /* ---------- center overlays ---------- */
+  #announce{position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);
+    text-align:center;z-index:200;pointer-events:none;opacity:0;transition:opacity .3s ease;}
+  #announce .r{font-size:44px;font-weight:600;letter-spacing:0.18em;color:var(--player-tint);}
+  #announce .s{font-family:'Space Mono',monospace;font-size:12px;letter-spacing:0.3em;color:var(--ui-red);margin-top:10px;}
+  #taunt-display{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    text-align:center;max-width:560px;z-index:200;display:none;pointer-events:none;
+    background:rgba(0,0,0,0.55);padding:28px 36px;border:1px solid rgba(255,26,60,0.25);}
+  #taunt-source{font-size:11px;letter-spacing:0.25em;color:var(--ui-red);margin-bottom:12px;}
+  #taunt-text{font-size:20px;font-weight:300;color:var(--player-tint);line-height:1.5;}
+  #taunt-display.pulse #taunt-text{animation:pulse 0.9s infinite;}
+  @keyframes pulse{0%,100%{opacity:0.25;}50%{opacity:1;}}
+
+  /* ---------- scanning intro ---------- */
+  #scan-overlay{position:fixed;inset:0;z-index:300;pointer-events:none;}
+  #scan-text{position:absolute;top:24%;left:50%;transform:translateX(-50%);
+    font-family:'Space Mono',monospace;font-size:15px;letter-spacing:0.3em;color:var(--ui-green);
+    text-shadow:0 0 12px rgba(0,255,136,0.5);text-align:center;}
+  #scan-sub{font-size:10px;color:rgba(0,255,136,0.5);margin-top:10px;letter-spacing:0.2em;}
+  #scan-gate{position:absolute;left:20%;width:60%;height:2px;top:-4px;
+    background:linear-gradient(90deg,transparent,var(--ui-green),transparent);
+    box-shadow:0 0 18px rgba(0,255,136,0.9);opacity:0;}
+  #scan-gate.go{opacity:1;animation:sweep 1.1s linear;}
+  @keyframes sweep{from{top:0;}to{top:100%;}}
+  .scan-bars{display:flex;gap:6px;justify-content:center;margin-top:14px;}
+  .scan-bars i{width:26px;height:3px;background:rgba(0,255,136,0.15);}
+  .scan-bars i.on{background:var(--ui-green);}
+
+  /* ---------- game over ---------- */
+  #game-over{position:fixed;inset:0;z-index:400;display:none;
+    background:rgba(5,5,8,0.93);text-align:center;padding-top:12vh;}
+  #go-result{font-size:52px;font-weight:600;letter-spacing:0.15em;color:var(--ui-red);}
+  #go-result.win{color:var(--ui-green);}
+  #go-final-message{max-width:520px;margin:26px auto 0;font-size:18px;font-weight:300;line-height:1.6;}
+  #go-profile-summary{max-width:460px;margin:34px auto 0;font-family:'Space Mono',monospace;
+    font-size:12px;line-height:2;color:var(--ui-green);text-align:left;
+    border:1px solid rgba(0,255,136,0.25);padding:18px 24px;background:rgba(0,0,0,0.6);}
+  #go-profile-summary .hdr{color:rgba(0,255,136,0.5);letter-spacing:0.2em;margin-bottom:6px;}
+  #go-profile-summary .tail{color:var(--ui-yellow);margin-top:8px;letter-spacing:0.15em;}
+  #go-restart{margin-top:36px;background:transparent;border:1px solid var(--ui-green);
+    color:var(--ui-green);font-family:'Space Mono',monospace;font-size:13px;letter-spacing:0.25em;
+    padding:12px 34px;cursor:pointer;transition:all .2s;}
+  #go-restart:hover{background:var(--ui-green);color:#000;}
+  #fatal{position:fixed;inset:0;z-index:500;display:none;background:var(--bg);
+    color:var(--ui-red);font-family:'Space Mono',monospace;font-size:13px;padding:40px;line-height:2;}
+  #api-note{position:absolute;top:20px;left:20px;font-family:'Space Mono',monospace;font-size:10px;
+    color:rgba(255,228,77,0.4);z-index:100;letter-spacing:0.1em;user-select:none;pointer-events:none;
+    max-width:240px;line-height:1.7;}
+
+</style>
+</head>
+<body>
+<div id="game-container"></div>
+<video id="webcam-video" autoplay muted playsinline></video>
+
+<div id="world-hud">
+  <div id="impbar"><i></i></div>
+  <div id="predlabel"><div class="a" id="pred-a"></div><div class="b" id="pred-b"></div></div>
+</div>
+<div id="vigCSS"></div>
+<div id="scanCSS"></div>
+<div id="xhair"></div>
+
+<div id="ui-overlay" style="position:fixed;inset:0;z-index:100;pointer-events:none;">
+  <div id="api-note"></div>
+  <div id="profile-panel" style="display:none;">
+    <div class="panel-header">BEHAVIORAL PROFILE</div>
+    <div class="panel-line"><span class="label">Dodge direction</span><span class="value" id="dodge-display">—</span></div>
+    <div class="panel-line"><span class="label">Position</span><span class="value" id="position-display">—</span></div>
+    <div class="panel-line"><span class="label">Aggression</span><span class="value" id="aggression-display">—</span></div>
+    <div class="panel-line"><span class="label">Reaction time</span><span class="value" id="reaction-display">—</span></div>
+    <div class="panel-line"><span class="label">Dodge distance</span><span class="value" id="dodgedist-display">—</span></div>
+    <div class="panel-line"><span class="label">Movement</span><span class="value" id="movement-display">—</span></div>
+    <div class="panel-line"><span class="label">Fire style</span><span class="value" id="firestyle-display">—</span></div>
+    <div class="panel-line"><span class="label">Aim</span><span class="value" id="aim-display">—</span></div>
+    <div class="panel-line"><span class="label">Subject stress</span><span class="value" id="stress-px">—</span></div>
+    <div class="panel-line"><span class="label">Pattern confidence</span></div>
+    <div class="confidence-bar"><div class="confidence-fill" id="confidence-fill"></div></div>
+    <div id="pattern-log"></div>
+  </div>
+  <div id="round-hud"><span class="big" id="round-label"></span><br><span id="round-timer"></span></div>
+  <div id="sys-note"></div>
+  <div id="hp-wrap"><div id="hp-fill"></div></div>
+  <div id="announce"><div class="r" id="ann-r"></div><div class="s" id="ann-s"></div></div>
+  <div id="taunt-display"><div id="taunt-source">THE IMPOSTOR</div><div id="taunt-text"></div></div>
+  <div id="scan-overlay">
+    <div id="scan-gate"></div>
+    <div id="scan-text">INITIALIZING...<div id="scan-sub"></div>
+      <div class="scan-bars"><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+  </div>
+  <div id="game-over">
+    <div id="go-result"></div>
+    <div id="go-final-message"></div>
+    <div id="go-profile-summary"></div>
+    <button id="go-restart" style="pointer-events:auto;">PLAY AGAIN</button>
+  </div>
+  <div id="fatal"></div>
+  <div id="hit-flash"></div>
+</div>
+<div id="stress-vign"></div>
+<div id="cam-box" style="display:none;">
+  <div class="cb-hdr">◉ SUBJECT FEED <span id="cb-state">SYNC</span></div>
+  <div class="cb-vid" id="cb-vid">
+    <div class="cb-nosignal" id="cb-nosignal">NO OPTICAL SIGNAL<br>SYNTHETIC SUBJECT</div>
+    <div class="cb-aine"></div>
+  </div>
+  <div class="cb-row"><span id="expr-emoji">😐</span><span id="expr-text">CALIBRATING</span></div>
+  <div class="cb-stress-row"><span>STRESS</span><div class="cb-bar"><i id="stress-fill"></i></div><span id="stress-pct">--%</span></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js"></script>
+
+<!-- game modules: classic scripts, strict dependency order. No build step — works over http:// and file://. -->
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 00-config.js
+   CONFIG: providers, keys, debug flag
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* =========================================================================
+   THE IMPOSTOR — 3D.  Same verified simulation, rendered in a 3D chamber.
+   Sim runs in logical 2D coordinates (1200x720 virtual arena); the Three.js
+   layer is a view of it. Webcam segmentation becomes a billboard texture.
+   ========================================================================= */
+
+const CONFIG = {
+  PROVIDER: "auto",              // auto | omniai | openrouter | anthropic | local
+  OMNIAI_API_KEY: "YOUR_API_KEY_HERE",
+  OMNIAI_MODEL: "gemini-2.5-flash-lite",
+  OPENROUTER_API_KEY: "YOUR_API_KEY_HERE",     // openrouter.ai — FREE tier
+  OPENROUTER_MODEL: "openrouter/free",         // or any :free variant
+  ANTHROPIC_API_KEY: "YOUR_API_KEY_HERE",
+  ANTHROPIC_MODEL: "claude-sonnet-4-6",
+  DEBUG_MODE: (typeof location !== "undefined" && /[?&]debug/.test(location.search)) || false
+};
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 01-core.js
+   helpers: $, clamp, rand, dist2, now, DIRV
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- utils ---------------- */
+const $=(id)=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rand=(a,b)=>a+Math.random()*(b-a);
+const now=()=>performance.now();
+const easeInOut=(t)=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+const dist2=(ax,ay,bx,by)=>{const dx=ax-bx,dy=ay-by;return Math.sqrt(dx*dx+dy*dy);};
+function circleCollide(a,b){return dist2(a.x,a.y,b.x,b.y)<(a.radius+b.radius);}
+const DIRV={left:{x:-1,y:0},right:{x:1,y:0},up:{x:0,y:-1},down:{x:0,y:1}};
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 02-audio.js
+   procedural WebAudio: tones, noise, sfx
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- audio (procedural WebAudio) ---------------- */
+let audioCtx=null, droneOsc=null;
+function initAudio(){
+  if(audioCtx) return;
+  try{
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    droneOsc=audioCtx.createOscillator();
+    const g=audioCtx.createGain(); g.gain.value=0.02;
+    droneOsc.type='sine'; droneOsc.frequency.value=55;
+    droneOsc.connect(g); g.connect(audioCtx.destination); droneOsc.start();
+  }catch(e){}
+}
+function playTone(freq,type,duration,gain){
+  if(!audioCtx)return; gain=gain===undefined?0.25:gain;
+  try{
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.connect(g);g.connect(audioCtx.destination);
+    o.type=type;o.frequency.value=freq;
+    g.gain.setValueAtTime(gain,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+duration);
+    o.start();o.stop(audioCtx.currentTime+duration);
+  }catch(e){}
+}
+function playNoise(dur,gain){
+  if(!audioCtx)return;
+  try{
+    const n=(audioCtx.sampleRate*dur)|0;
+    const buf=audioCtx.createBuffer(1,n,audioCtx.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n);
+    const s=audioCtx.createBufferSource();s.buffer=buf;
+    const g=audioCtx.createGain();g.gain.value=gain;
+    s.connect(g);g.connect(audioCtx.destination);s.start();
+  }catch(e){}
+}
+function playSweep(f1,f2,dur,type,gain){
+  if(!audioCtx)return;
+  try{
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type||'sawtooth';o.frequency.setValueAtTime(f1,audioCtx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(f2,audioCtx.currentTime+dur);
+    g.gain.setValueAtTime(gain||0.2,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+    o.connect(g);g.connect(audioCtx.destination);
+    o.start();o.stop(audioCtx.currentTime+dur);
+  }catch(e){}
+}
+const sfx={
+  shoot:()=>playTone(800,'square',0.05,0.10),
+  eHit:()=>playNoise(0.08,0.22),
+  pHit:()=>{playTone(80,'sine',0.15,0.4);playNoise(0.1,0.18);},
+  impostorAppear:()=>playSweep(400,80,1.5,'sawtooth',0.16),
+  confirm:()=>{playTone(440,'sine',0.1,0.2);setTimeout(()=>playTone(880,'sine',0.1,0.2),110);},
+  round:()=>playSweep(100,300,2,'sine',0.12),
+  ominous:()=>playTone(46,'sine',1.4,0.22),
+  die:()=>{playSweep(300,40,0.9,'sawtooth',0.2);playNoise(0.4,0.25);}
+};
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 03-state-input.js
+   game state enum, globals, input listeners
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- game state ---------------- */
+const GS={LOADING:"loading",SCANNING:"scanning",ROUND_INTRO:"round_intro",PLAYING:"playing",
+  ROUND_END:"round_end",AI_THINKING:"ai_thinking",TAUNT:"taunt",GAME_OVER:"game_over",WIN:"win"};
+let state=GS.LOADING;
+let round=1, timeScale=1, shakeMag=0, glitchFrames=0, simTime=0, recoil=0, bloomSpike=0;
+let roundTimeLeft=0, spawnTimer=0, spawnTensionMult=1;
+let aiConfig=null, lastAITaunt="";
+
+/* virtual logical arena (sim resolution-independent) */
+const VW=1200, VH=720;
+const arena={x:40,y:40,w:VW-80,h:VH-80};
+const U=50; // logical px per world unit
+
+/* ---------------- input ---------------- */
+const input={keys:{},mouse:{x:600,y:300,sx:0,sy:0,lsx:null,lsy:null,leftDown:false}};
+document.addEventListener('keydown',e=>{initAudio();if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+  input.keys[e.code]=true;
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();});
+document.addEventListener('keyup',e=>{input.keys[e.code]=false;});
+document.addEventListener('mousemove',e=>{
+  input.mouse.sx=e.clientX;input.mouse.sy=e.clientY;
+  $('xhair').style.left=e.clientX+'px';$('xhair').style.top=e.clientY+'px';
+  mouseDirty=true;});
+document.addEventListener('mousedown',e=>{initAudio();if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+  if(e.button===0)input.mouse.leftDown=true;});
+document.addEventListener('mouseup',e=>{if(e.button===0)input.mouse.leftDown=false;});
+let mouseDirty=true;
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 04-tracker.js
+   behavior tracker + computeProfile
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- behavior tracker ---------------- */
+const tracker={
+  dodgeDirections:{left:0,right:0,up:0,down:0},
+  dodgeDistances:[],                      // how FAR each dodge travels (px)
+  quadrantTime:[0,0,0,0],                 // seconds spent in each arena quadrant
+  speedSamples:[],stationarySamples:0,totalSamples:0,
+  aimOffsets:[],                          // angular aim error (deg) at each shot
+  wobbleSamples:[],wobbleTime:0,          // mouse movement speed (px/s) sampling
+  burstShots:0,burstEvents:0,burstCooldown:0,
+  lowHpShots:0,                           // of shotsFired, how many under 30hp
+  reversalSamples:0,lastReversalTime:0, // zigzag rhythm timing (s)
+  fireUnderFire:0,                        // shots fired within 500ms of an enemy shot
+  positionSamples:[],shotsFired:0,distanceTraveled:0,
+  reactionTimes:[],panicMoves:[],
+  profile:{dominantDodge:null,dodgeConsistency:0,positionPreference:null,
+    aggressionRatio:0,avgReactionTime:0,panicBehavior:null,patternConfidence:0,
+    avgDodgeDistance:0,dominantQuadrant:null,avgSpeed:0,stationaryFraction:0,
+    aimBiasX:0,aimBiasY:0,aimOffsetMag:0,handWobble:0,avgBurst:0,
+    lowHpAggression:0,reversalInterval:0,firesBackRatio:0}
+};
+let pendingShotTime=0,lastInputKey="",posSampleTimer=0;
+let dodgeWatch={active:false,until:0,dx:0,dy:0};
+function triggerDodgeWatch(){
+  if(dodgeWatch.active)return;
+  dodgeWatch={active:true,until:now()+500,dx:0,dy:0};
+}
+function noteEnemyShot(){ window._lastEnemyShot=now(); if(!pendingShotTime)pendingShotTime=now(); }
+function onInputChange(key){
+  if(!key||key===lastInputKey)return;
+  const nowT=now();
+  if(lastInputKey&&tracker.lastReversalTime){
+    tracker.reversalInterval=clamp(0.88*(tracker.reversalInterval||0)+0.12*(nowT-tracker.lastReversalTime),0.25,4);
+    tracker.reversalSamples++;
+  }
+  tracker.lastReversalTime=nowT;
+  lastInputKey=key;
+  if(pendingShotTime){
+    const rt=now()-pendingShotTime;
+    if(rt>80&&rt<3000)tracker.reactionTimes.push(rt);
+    pendingShotTime=0;
+  }
+  if(player.hp<30){
+    const d=keyDir(key); if(d&&tracker.panicMoves.length<24)tracker.panicMoves.push(d);
+  }
+}
+function keyDir(key){
+  if(key==='KeyA'||key==='ArrowLeft')return'left';
+  if(key==='KeyD'||key==='ArrowRight')return'right';
+  if(key==='KeyW'||key==='ArrowUp')return'up';
+  if(key==='KeyS'||key==='ArrowDown')return'down';
+  return null;
+}
+function classify(dx,dy){
+  if(Math.abs(dx)>Math.abs(dy))return dx>0?'right':'left';
+  return dy>0?'down':'up';
+}
+function liveDominant(){
+  const d=tracker.dodgeDirections;
+  const total=d.left+d.right+d.up+d.down;
+  if(total<2)return null;
+  return Object.keys(d).reduce((a,b)=>d[a]>=d[b]?a:b);
+}
+function computeProfile(){
+  const p=tracker.profile,d=tracker.dodgeDirections;
+  const total=d.left+d.right+d.up+d.down;
+  if(total>0){
+    const dom=Object.keys(d).reduce((a,b)=>d[a]>=d[b]?a:b);
+    p.dominantDodge=dom;p.dodgeConsistency=d[dom]/total;
+  }
+  if(tracker.dodgeDistances.length>0){
+    const ds=tracker.dodgeDistances;
+    p.avgDodgeDistance=ds.reduce((a,b)=>a+b,0)/ds.length;
+  }
+  if(tracker.positionSamples.length>0){
+    const ax=tracker.positionSamples.reduce((a,b)=>a+b.x,0)/tracker.positionSamples.length;
+    const ay=tracker.positionSamples.reduce((a,b)=>a+b.y,0)/tracker.positionSamples.length;
+    const dc=Math.sqrt(Math.pow(ax-0.5,2)+Math.pow(ay-0.5,2));
+    p.positionPreference=dc<0.16?"center":dc<0.3?"edge":"corner";
+  }
+  if(tracker.quadrantTime.some(q=>q>0)){
+    let qi=0;for(let i=1;i<4;i++)if(tracker.quadrantTime[i]>tracker.quadrantTime[qi])qi=i;
+    p.dominantQuadrant=(qi%2===0?"LEFT ":"RIGHT ")+(qi<2?"TOP":"BOTTOM");
+  }
+  if(tracker.reactionTimes.length>0)
+    p.avgReactionTime=tracker.reactionTimes.reduce((a,b)=>a+b,0)/tracker.reactionTimes.length;
+  if(tracker.totalSamples>0)p.stationaryFraction=tracker.stationarySamples/tracker.totalSamples;
+  if(tracker.speedSamples.length>0)
+    p.avgSpeed=tracker.speedSamples.reduce((a,b)=>a+b,0)/tracker.speedSamples.length;
+  if(tracker.aimOffsets.length>0){
+    const ox=tracker.aimOffsets.reduce((a,b)=>a+b.x,0)/tracker.aimOffsets.length;
+    const oy=tracker.aimOffsets.reduce((a,b)=>a+b.y,0)/tracker.aimOffsets.length;
+    const om=tracker.aimOffsets.reduce((a,b)=>a+b.m,0)/tracker.aimOffsets.length;
+    p.aimBiasX=ox;p.aimBiasY=oy;p.aimOffsetMag=om;
+  }
+  if(tracker.wobbleTime>0)
+    p.handWobble=tracker.wobbleSamples.reduce((a,b)=>a+b,0)/tracker.wobbleSamples.length;
+  if(tracker.burstEvents>0)p.avgBurst=tracker.burstShots/tracker.burstEvents;
+  p.reversalInterval=tracker.reversalInterval||0;
+  if(tracker.shotsFired>0)p.lowHpAggression=tracker.lowHpShots/tracker.shotsFired;
+  if(tracker.reactionTimes.length>0)p.firesBackRatio=tracker.fireUnderFire/tracker.reactionTimes.length;
+  const sampleWeight=Math.min(total/10,1);
+  const coverage=(tracker.dodgeDistances.length>0?0.08:0)
+    +(tracker.quadrantTime.some(q=>q>0)?0.08:0)+(tracker.aimOffsets.length>0?0.08:0)
+    +(tracker.burstEvents>0?0.06:0);
+  p.patternConfidence=clamp(p.dodgeConsistency*0.6+sampleWeight*0.4+coverage,0,1);
+  p.aggressionRatio=Math.min(tracker.shotsFired/30,1);
+  if(tracker.panicMoves.length>0){
+    const counts={};tracker.panicMoves.forEach(m=>counts[m]=(counts[m]||0)+1);
+    p.panicBehavior=Object.keys(counts).reduce((a,b)=>counts[a]>=counts[b]?a:b);
+  }
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 05-world.js
+   THREE scene: renderer, bloom, floor, walls, floaters, stars
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* =========================================================================
+   THREE.JS RENDER LAYER
+   ========================================================================= */
+if(typeof THREE==='undefined'){
+  $('fatal').style.display='block';
+  $('fatal').textContent='FAILED TO LOAD THREE.JS FROM CDN. CHECK INTERNET CONNECTION.';
+  throw new Error('THREE missing');
+}
+const L2X=(lx)=>(lx-VW/2)/U;         // logical → world x
+const L2Z=(ly)=>(ly-VH/2)/U;         // logical → world z
+const X2L=(wx)=>wx*U+VW/2;
+const Z2L=(wz)=>wz*U+VH/2;
+
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.setClearColor(0x050508);
+renderer.outputEncoding=THREE.sRGBEncoding;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.1;
+$('game-container').appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0x050508,20,46);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,120);
+camera.position.set(0,9.5,12);
+camera.lookAt(0,1,0);
+
+const composer=new THREE.EffectComposer(renderer);
+composer.addPass(new THREE.RenderPass(scene,camera));
+const bloomPass=new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),0.55,0.4,0.28);
+composer.addPass(bloomPass);
+
+/* lights */
+scene.add(new THREE.AmbientLight(0x2a3048,0.9));
+const playerLight=new THREE.PointLight(0xd8ecf5,0.5,14);
+playerLight.position.set(0,2.6,5.6);
+scene.add(playerLight);
+const impostorLight=new THREE.PointLight(0xff1a3c,0,12);
+scene.add(impostorLight);
+
+/* floor: canvas texture (grid + polygons re-rendered per round) */
+const floorCanvas=document.createElement('canvas');
+floorCanvas.width=1024;floorCanvas.height=640;
+const fctx=floorCanvas.getContext('2d');
+const floorTex=new THREE.CanvasTexture(floorCanvas);
+floorTex.encoding=THREE.sRGBEncoding;
+const floorMesh=new THREE.Mesh(
+  new THREE.PlaneGeometry((VW/U),(VH/U)),
+  new THREE.MeshBasicMaterial({map:floorTex,fog:true}));
+floorMesh.rotation.x=-Math.PI/2;
+scene.add(floorMesh);
+function drawFloor(){
+  const w=floorCanvas.width,h=floorCanvas.height;
+  fctx.fillStyle='#06070c';fctx.fillRect(0,0,w,h);
+  const op=round>=3?1.0:round===2?0.75:0.55;
+  fctx.lineWidth=1;
+  const sx=w/(VW/60), sy=h/(VH/60);
+  const ax=40*(w/VW), ay=40*(h/VH), aw=(arena.w)*(w/VW), ah=(arena.h)*(h/VH);
+  // hexagonal battle tiles
+  fctx.strokeStyle='rgba(28,42,70,'+op+')';
+  fctx.beginPath();
+  const HS=16;
+  const qN=Math.ceil(w/(HS*1.5))+1, rN=Math.ceil(h/(HS*0.866*2))+1;
+  for(let q=0;q<qN;q++)for(let r=0;r<=rN;r++){
+    const cx=q*1.5*HS+HS, cy=(2*r+(q%2))*HS*0.866;
+    if(cy<-HS||cy>h+HS)continue;
+    for(let k=0;k<7;k++){
+      const an=Math.PI/3*k+Math.PI/6;
+      const px=cx+HS*Math.cos(an),py=cy+HS*Math.sin(an);
+      k===0?fctx.moveTo(px,py):fctx.lineTo(px,py);
+    }
+  }
+  fctx.stroke();
+  // reactor glyph at the arena core
+  const gx=(VW/2)/VW*w, gy=330/VH*h;
+  fctx.strokeStyle='rgba(42,255,200,'+(op*0.55)+')';
+  fctx.beginPath();fctx.arc(gx,gy,26,0,Math.PI*2);fctx.stroke();
+  fctx.beginPath();
+  for(let k=0;k<8;k++){
+    const an=k/8*Math.PI*2;
+    fctx.moveTo(gx+Math.cos(an)*30,gy+Math.sin(an)*30);
+    fctx.lineTo(gx+Math.cos(an)*37,gy+Math.sin(an)*37);
+  }
+  fctx.stroke();
+  fctx.strokeStyle='rgba(0,255,136,0.2)';
+  fctx.strokeRect(ax,ay,aw,ah);
+  if(round>=2){
+    const a=round>=3?0.20:0.10;
+    fctx.strokeStyle='rgba(74,74,122,'+a+')';
+    const polys=[
+      [[0.12,0.2],[0.3,0.13],[0.36,0.3],[0.2,0.36],[0.1,0.3]],
+      [[0.75,0.12],[0.9,0.2],[0.84,0.36],[0.68,0.3]],
+      [[0.15,0.72],[0.3,0.66],[0.38,0.8],[0.24,0.9]],
+      [[0.7,0.7],[0.88,0.68],[0.92,0.85],[0.74,0.88]]
+    ];
+    polys.forEach(p=>{
+      fctx.beginPath();
+      fctx.moveTo(p[0][0]*w,p[0][1]*h);
+      const n=round>=3?p.length:p.length-1;
+      for(let k=1;k<n;k++)fctx.lineTo(p[k][0]*w,p[k][1]*h);
+      if(round>=3)fctx.closePath();
+      fctx.stroke();
+    });
+  }
+  floorTex.needsUpdate=true;
+}
+
+/* walls: rise as the world materializes */
+const wallCfg={1:{h:0.35,o:0.18},2:{h:0.85,o:0.45},3:{h:1.5,o:0.8}};
+const walls=[];
+{
+  const wallMat=()=>new THREE.MeshBasicMaterial({color:0x0a0d16,transparent:true,opacity:0.2,fog:true});
+  const edgeMat=()=>new THREE.MeshBasicMaterial({color:0x00ff88,transparent:true,opacity:0.25,fog:false});
+  const defs=[
+    {w:arena.w/U,z:L2Z(arena.y),          x:0,                 rot:0, horiz:true },
+    {w:arena.w/U,z:L2Z(arena.y+arena.h),  x:0,                 rot:0, horiz:true },
+    {w:arena.h/U,x:L2X(arena.x),          z:0,                 rot:Math.PI/2, horiz:false },
+    {w:arena.h/U,x:L2X(arena.x+arena.w),  z:0,                 rot:Math.PI/2, horiz:false }
+  ];
+  defs.forEach(d=>{
+    const seg=new THREE.Group();
+    const body=new THREE.Mesh(new THREE.BoxGeometry(d.w,1,0.08),wallMat());
+    const edge=new THREE.Mesh(new THREE.BoxGeometry(d.w,0.035,0.03),edgeMat());
+    seg.add(body,edge);
+    // flickering charge marks along each wall — turn red when the copy is loose
+    const marks=[];
+    for(let k=0;k<4;k++){
+      const mk=new THREE.Mesh(new THREE.BoxGeometry(0.7,0.055,0.025),edgeMat());
+      mk.position.set((k-1.5)*d.w*0.22,0.14,0.03);
+      mk.userData.ph=k*2.1+d.w;
+      marks.push(mk);seg.add(mk);
+    }
+    if(d.horiz){seg.position.set(d.x,0,d.z);}
+    else{seg.position.set(d.x,0,d.z);seg.rotation.y=d.rot;}
+    scene.add(seg);
+    walls.push({seg,body,edge,h:0.35,marks});
+  });
+}
+function updateWalls(dt){
+  const cfg=wallCfg[round]||wallCfg[1];
+  const hostile=impostor.active&&!impostor.dead;
+  for(const w of walls){
+    w.h+=(cfg.h-w.h)*dt*1.5;
+    w.body.scale.y=Math.max(0.01,w.h);
+    w.body.position.y=w.h/2;
+    w.edge.position.y=w.h;
+    w.body.material.opacity+=(cfg.o-w.body.material.opacity)*dt*1.5;
+    w.edge.material.opacity=w.body.material.opacity+0.1;
+    w.edge.material.color.setHex(hostile?0xff2a4c:0x00ff88);
+    w.marks.forEach(m=>{
+      m.position.y=w.h*0.55;
+      m.material.opacity=0.10+0.10*Math.sin(simTime*4+m.userData.ph)+(hostile?0.08:0);
+      m.material.color.setHex(hostile?0xff2a4c:0x00ff88);
+    });
+  }
+}
+
+/* void floaters: ambient dark geometry outside the arena */
+const floaters=[];
+{
+  const geos=[new THREE.OctahedronGeometry(0.5),new THREE.TetrahedronGeometry(0.55),new THREE.IcosahedronGeometry(0.42)];
+  for(let i=0;i<16;i++){
+    const m=new THREE.Mesh(geos[i%3],new THREE.MeshBasicMaterial({color:i%2?0x141828:0x1a1220,wireframe:i%3===0,transparent:true,opacity:0.55,fog:true}));
+    const a=Math.random()*Math.PI*2, r=13+Math.random()*9;
+    m.position.set(Math.cos(a)*r, 0.8+Math.random()*6, Math.sin(a)*r*0.8);
+    m.userData={rs:rand(0.1,0.5),fs:rand(0.2,0.7),ph:rand(0,6),y:m.position.y};
+    scene.add(m);
+    floaters.push(m);
+  }
+}
+const floaterCount={1:5,2:10,3:16};
+function updateFloaters(dt){
+  const n=floaterCount[round]||5;
+  floaters.forEach((f,i)=>{
+    f.visible=i<n;
+    if(!f.visible)return;
+    f.rotation.x+=dt*f.userData.rs;f.rotation.y+=dt*f.userData.rs*0.7;
+    f.position.y=f.userData.y+Math.sin(simTime*f.userData.fs+f.userData.ph)*0.35;
+  });
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 06-battlefield.js
+   pillars, reactor core, pylons, beams, glow sprites, orbit shards
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* =========================================================================
+   BATTLEFIELD DRESSING
+   cover pillars (destroyable, block shots) · reactor core (periodic EMP)
+   corner pylons · glowing edge beams · player orbit shards · impostor shard halo
+   ========================================================================= */
+const pillars=[];
+const pillarPresets={
+  1:[[420,240],[780,540]],
+  2:[[350,210],[850,210],[600,560]],
+  3:[[350,210],[850,210],[350,550],[850,550]]
+};
+function buildPillars(){
+  pillars.forEach(p=>{if(p.grp)scene.remove(p.grp);});
+  pillars.length=0;
+  (pillarPresets[round]||pillarPresets[1]).forEach(([lx,ly])=>{
+    const grp=new THREE.Group();
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(0.46,0.6,1.1,6),
+      new THREE.MeshBasicMaterial({color:0x0c1418,fog:true}));
+    body.position.y=0.55;
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry),
+      new THREE.LineBasicMaterial({color:0x2affc8,fog:false}));
+    edges.position.y=0.55;
+    const cap=new THREE.Mesh(new THREE.CylinderGeometry(0.18,0.3,0.14,6),
+      new THREE.MeshBasicMaterial({color:0x2affc8,transparent:true,opacity:0.9,fog:false}));
+    cap.position.y=1.18;
+    const glow=makeGlowSprite(0x1a8a70,1.7,0.26);
+    glow.position.y=0.5;
+    grp.add(body,edges,cap,glow);
+    grp.position.set(L2X(lx),0,L2Z(ly));
+    scene.add(grp);
+    pillars.push({x:lx,y:ly,r:27,hp:48,maxHp:48,dead:false,grp,
+      edges,cap,glow,flash:0,bob:rand(0,6)});
+  });
+}
+function damagePillar(pl,dmg,hex){
+  if(pl.dead)return;
+  pl.hp-=dmg*0.6;pl.flash=1;
+  if(pl.hp<=0){
+    pl.dead=true;
+    spawnParticles(pl.x,pl.y,0x2affc8,26,220);
+    spawnParticles(pl.x,pl.y,0xffffff,9,150);
+    shakeMag=Math.max(shakeMag,9);bloomSpike=Math.max(bloomSpike,1.0);
+    sfx.eHit();
+    scene.remove(pl.grp);
+  }
+}
+function updatePillars(dt){
+  for(const pl of pillars){
+    if(pl.dead)continue;
+    if(pl.flash>0)pl.flash=Math.max(0,pl.flash-dt*4);
+    const frac=clamp(pl.hp/pl.maxHp,0,1);
+    pl.edges.material.color.setHex(pl.flash>0.35?0xffffff:(frac<0.5?0xff5a4c:0x2affc8));
+    pl.cap.material.opacity=0.55+0.35*Math.sin(simTime*3+pl.bob)+pl.flash*0.6;
+    pl.cap.position.y=1.18+Math.sin(simTime*1.8+pl.bob)*0.05;
+    pl.glow.material.opacity=0.16+frac*0.18+pl.flash*0.5;
+  }
+}
+/* push a logical point out of any standing pillar */
+function resolvePillarPush(x,y,r){
+  for(const pl of pillars){
+    if(pl.dead)continue;
+    const dd=dist2(x,y,pl.x,pl.y),min=pl.r+r;
+    if(dd<min){
+      if(dd<0.1){x=pl.x+min;continue;}
+      x=pl.x+(x-pl.x)/dd*min;
+      y=pl.y+(y-pl.y)/dd*min;
+    }
+  }
+  return{x,y};
+}
+
+/* reactor core: slowly rotates, periodically clears ALL hostile fire (mercy EMP) */
+const coreObj={};
+let coreWave=null,coreWaveT=0,coreCfg={t:9,cd:24};
+const coreLight=new THREE.PointLight(0x2affc8,0.4,11);
+{
+  const g=new THREE.Group();
+  const body=new THREE.Mesh(new THREE.IcosahedronGeometry(0.4,0),
+    new THREE.MeshBasicMaterial({color:0x0e2030,fog:true}));
+  const edges=new THREE.LineSegments(new THREE.EdgesGeometry(body.geometry),
+    new THREE.LineBasicMaterial({color:0x3affc8,fog:false}));
+  body.position.y=1.55;edges.position.y=1.55;
+  const ringX=new THREE.Mesh(new THREE.TorusGeometry(0.92,0.02,6,42),
+    new THREE.MeshBasicMaterial({color:0x1a7a68,transparent:true,opacity:0.8,fog:false}));
+  const ringY=new THREE.Mesh(new THREE.TorusGeometry(0.68,0.014,6,32),
+    new THREE.MeshBasicMaterial({color:0x2affc8,transparent:true,opacity:0.6,fog:false}));
+  ringX.position.y=1.55;ringY.position.y=1.55;
+  const glyph=new THREE.Mesh(new THREE.RingGeometry(1.05,1.12,48),
+    new THREE.MeshBasicMaterial({color:0x2affc8,transparent:true,opacity:0.3,side:THREE.DoubleSide,fog:true}));
+  glyph.rotation.x=-Math.PI/2;glyph.position.y=0.015;
+  g.add(body,edges,ringX,ringY,glyph);
+  g.position.set(L2X(VW/2),0,L2Z(330));
+  scene.add(g);
+  coreLight.position.set(L2X(VW/2),1.6,L2Z(330));
+  scene.add(coreLight);
+  coreWave=new THREE.Mesh(new THREE.RingGeometry(0.92,1.02,64),
+    new THREE.MeshBasicMaterial({color:0x2affc8,transparent:true,opacity:0,side:THREE.DoubleSide,fog:false}));
+  coreWave.rotation.x=-Math.PI/2;
+  coreWave.position.set(L2X(VW/2),0.05,L2Z(330));
+  scene.add(coreWave);
+  Object.assign(coreObj,{g,body,edges,ringX,ringY,glyph,glow:null});
+}
+
+/* corner pylons + edge beams */
+const pylons=[],beams=[];
+{
+  const corners=[[arena.x,arena.y],[arena.x+arena.w,arena.y],[arena.x,arena.y+arena.h],[arena.x+arena.w,arena.y+arena.h]];
+  corners.forEach(c=>{
+    const g=new THREE.Group();
+    const post=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.085,1.1,8),
+      new THREE.MeshBasicMaterial({color:0x0e1218,fog:true}));
+    post.position.y=0.55;
+    const cap=new THREE.Mesh(new THREE.SphereGeometry(0.085,8,6),
+      new THREE.MeshBasicMaterial({color:0x2affc8,transparent:true,opacity:0.9,fog:false}));
+    cap.position.y=1.18;
+    g.add(post,cap);
+    g.position.set(L2X(c[0]),0,L2Z(c[1]));
+    scene.add(g);
+    pylons.push({g,cap});
+  });
+  const bb=[[arena.x+arena.w/2,arena.y+6,arena.w],[arena.x+arena.w/2,arena.y+arena.h-6,arena.w],
+    [arena.x+6,arena.y+arena.h/2,arena.h],[arena.x+arena.w-6,arena.y+arena.h/2,arena.h]];
+  bb.forEach((d,i)=>{
+    const horiz=i<2;
+    const m=new THREE.Mesh(new THREE.BoxGeometry(horiz?d[2]/U:0.035,0.025,horiz?0.035:d[2]/U),
+      new THREE.MeshBasicMaterial({color:0x00ff88,transparent:true,opacity:0.3,fog:false}));
+    m.position.set(L2X(d[0]),0.03,L2Z(d[1]));
+    scene.add(m);
+    beams.push(m);
+  });
+}
+
+/* player orbit shards: three crystal satellites circling the hit-point */
+const playerOrbit=new THREE.Group();
+for(let k=0;k<3;k++){
+  const s=new THREE.Mesh(new THREE.TetrahedronGeometry(0.09,0),
+    new THREE.MeshBasicMaterial({color:0xd8ecf5,fog:false}));
+  s.userData.k=k;
+  playerOrbit.add(s);
+}
+scene.add(playerOrbit);
+
+/* impostor shard halo: red crystal swarm hovering around the copy */
+const impShards=new THREE.Group();
+for(let k=0;k<5;k++){
+  const s=new THREE.Mesh(new THREE.TetrahedronGeometry(0.11,0),
+    new THREE.MeshBasicMaterial({color:0xff2a4c,fog:false}));
+  s.userData={k,ph:rand(0,6)};
+  impShards.add(s);
+}
+scene.add(impShards);
+
+function updateBattlefield(dt){
+  if(!coreObj.glow){coreObj.glow=makeGlowSprite(0x2affc8,2.4,0.3);coreObj.glow.position.y=1.55;coreObj.g.add(coreObj.glow);}
+  coreObj.edges.rotation.y+=dt*0.7;coreObj.body.rotation.y+=dt*0.7;
+  coreObj.body.rotation.x+=dt*0.3;coreObj.edges.rotation.x+=dt*0.3;
+  coreObj.ringX.rotation.x+=dt*0.9;coreObj.ringX.rotation.z+=dt*0.5;
+  coreObj.ringY.rotation.x-=dt*1.3;coreObj.ringY.rotation.y+=dt*0.8;
+  coreObj.glow.material.opacity=0.22+0.1*Math.sin(simTime*2.4);
+  coreLight.intensity=0.32+0.16*Math.sin(simTime*2.4)+(coreWaveT>0?coreWaveT*0.5:0);
+  // EMP pulse: periodically wipes hostile projectiles
+  if(state===GS.PLAYING&&!impostor.peel){
+    coreCfg.t-=dt;
+    if(coreCfg.t<=0){
+      coreCfg.t=coreCfg.cd;
+      coreWaveT=1;
+      sfx.round();shakeMag=Math.max(shakeMag,3);
+      showPrediction("REACTOR PULSE","HOSTILE FIRE CLEARED",1.6,0x2affc8);
+      for(const pool of[eProj,iProj])
+        for(const pr of pool)if(pr.active){
+          spawnParticles(pr.x,pr.y,0x2affc8,2,60);
+          pr.active=false;pr.mesh.visible=false;
+        }
+    }
+  }
+  if(coreWaveT>0){
+    coreWaveT-=dt*2.4;
+    const p=1-coreWaveT;
+    coreWave.scale.setScalar(1+p*8);
+    coreWave.material.opacity=Math.max(0,coreWaveT)*0.6;
+  }else coreWave.material.opacity=0;
+  updatePillars(dt);
+  pylons.forEach((p,i)=>{
+    const pd=dist2(player.x,player.y,X2L(p.g.position.x),Z2L(p.g.position.z));
+    p.cap.material.opacity=clamp(0.45+0.42*Math.sin(simTime*2.8+i*1.7)+(pd<160?0.5*(1-pd/160):0),0,1);
+  });
+  beams.forEach((b,i)=>{b.material.opacity=0.24+0.13*Math.sin(simTime*2+i*Math.PI/2);});
+}
+
+/* starfield */
+{
+  const n=420,pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    const r=38+Math.random()*30,a=Math.random()*Math.PI*2,b=Math.random()*Math.PI;
+    pos[i*3]=r*Math.sin(b)*Math.cos(a);pos[i*3+1]=Math.abs(r*Math.cos(b))*0.6-2;pos[i*3+2]=r*Math.sin(b)*Math.sin(a);
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x44507a,size:0.2,fog:false})));
+}
+
+/* glow texture (radial) */
+function makeGlowTex(){
+  const c=document.createElement('canvas');c.width=c.height=128;
+  const x=c.getContext('2d');
+  const gr=x.createRadialGradient(64,64,2,64,64,64);
+  gr.addColorStop(0,'rgba(255,255,255,0.9)');
+  gr.addColorStop(0.45,'rgba(255,255,255,0.25)');
+  gr.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=gr;x.fillRect(0,0,128,128);
+  const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;return t;
+}
+const glowTex=makeGlowTex();
+function makeGlowSprite(hex,scale,opacity){
+  const m=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:hex,transparent:true,
+    opacity:opacity===undefined?0.4:opacity,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+  m.scale.set(scale,scale,1);
+  return m;
+}
+
+/* crosshair aim line (3D, dashed) */
+const aimLine=(()=>{
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(6),3));
+  const l=new THREE.Line(g,new THREE.LineDashedMaterial({color:0xe8f4f8,transparent:true,opacity:0.22,dashSize:0.22,gapSize:0.18,fog:false}));
+  l.frustumCulled=false;
+  scene.add(l);
+  return l;
+})();
+
+/* player hitbox marker ring */
+const ring=(()=>{
+  const m=new THREE.Mesh(new THREE.RingGeometry(0.5,0.62,40),
+    new THREE.MeshBasicMaterial({color:0xe8f4f8,transparent:true,opacity:0.4,side:THREE.DoubleSide,fog:false}));
+  m.rotation.x=-Math.PI/2;m.position.y=0.02;
+  scene.add(m);
+  return m;
+})();
+const ring2=(()=>{
+  const m=new THREE.Mesh(new THREE.RingGeometry(0.7,0.74,40),
+    new THREE.MeshBasicMaterial({color:0xe8f4f8,transparent:true,opacity:0.15,side:THREE.DoubleSide,fog:false}));
+  m.rotation.x=-Math.PI/2;m.position.y=0.02;
+  scene.add(m);
+  return m;
+})();
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 07-player.js
+   player state + 3D billboard sprite
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- player ---------------- */
+const player={x:VW/2,y:VH*0.68,r:30,radius:30,
+  hp:100,maxHp:100,speed:220,shootCd:0,dead:false,invulnT:0,
+  vx:0,vy:0,dxFrame:0,dyFrame:0};
+let playerSprite3d=null,playerTexDirty=false,userTex=null;
+
+function ensurePlayerSprite(){
+  if(playerSprite3d){
+    if(playerTexDirty){userTex.needsUpdate=true;playerTexDirty=false;}
+    return;
+  }
+  if(!offCanvas.width)return;
+  userTex=new THREE.CanvasTexture(offCanvas);
+  userTex.encoding=THREE.sRGBEncoding;
+  const mat=new THREE.SpriteMaterial({map:userTex,color:0xcfe3ee,transparent:true,opacity:0.85,depthWrite:false,fog:false});
+  playerSprite3d=new THREE.Sprite(mat);
+  const h=3.3, w=h*(offCanvas.width/offCanvas.height);
+  playerSprite3d.scale.set(w,h,1);
+  playerSprite3d.center.set(0.5,0);
+  playerSprite3d._baseY=0.55;
+  playerSprite3d.position.set(0,playerSprite3d._baseY,6.35);
+  playerSprite3d.renderOrder=2;
+  scene.add(playerSprite3d);
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 08-particles.js
+   particle pool + spawnParticles
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- particles (3D sprites) ---------------- */
+const particles=[];
+function spawnParticles(lx,ly,hex,n,spd){
+  for(let i=0;i<n;i++){
+    let p=particles.find(q=>!q.active);
+    if(!p){
+      if(particles.length>150)return;
+      p={active:false,
+        spr:new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,transparent:true,
+          blending:THREE.AdditiveBlending,depthWrite:false,fog:false})),
+        vx:0,vy:0,vz:0,life:0,maxLife:1};
+      scene.add(p.spr);
+      particles.push(p);
+    }
+    p.active=true;p.life=p.maxLife=rand(0.3,0.8);
+    const a=Math.random()*Math.PI*2,s=rand(spd*0.3,spd)/U;
+    p.vx=Math.cos(a)*s;p.vz=Math.sin(a)*s;p.vy=rand(0.8,2.4);
+    p.spr.material.color.setHex(hex);
+    p.spr.material.opacity=1;
+    p.spr.position.set(L2X(lx),0.5,L2Z(ly));
+    const sc=rand(0.15,0.4);
+    p.spr.scale.set(sc,sc,1);
+    p.spr.visible=true;
+  }
+}
+function updateParticles(dt){
+  for(const p of particles){
+    if(!p.active)continue;
+    p.life-=dt;
+    if(p.life<=0){p.active=false;p.spr.visible=false;continue;}
+    p.vy-=6*dt;
+    if(p.spr.position.y<0.04)p.vy*=-0.4;
+    p.spr.position.x+=p.vx*dt;p.spr.position.y+=p.vy*dt;p.spr.position.z+=p.vz*dt;
+    p.spr.material.opacity=Math.max(0,p.life/p.maxLife);
+  }
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 09-projectiles.js
+   projectile pools, firing, pillar blocking
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- projectiles ---------------- */
+function makeProjPool(n,hex,size){
+  const pool=[];
+  const geo=new THREE.SphereGeometry(size,10,8);
+  for(let i=0;i<n;i++){
+    const m=new THREE.Mesh(geo,new THREE.MeshBasicMaterial({color:hex,fog:false}));
+    m.visible=false;scene.add(m);
+    pool.push({active:false,mesh:m,x:0,y:0,vx:0,vy:0,dmg:0,radius:5,life:0});
+  }
+  return pool;
+}
+const pProj=makeProjPool(48,0xe8f4f8,0.14);
+const eProj=makeProjPool(64,0x7a7ad8,0.17);
+const iProj=makeProjPool(32,0xff2a4c,0.16);
+function fireProj(pool,x,y,tx,ty,speed,dmg,radius,life){
+  const pr=pool.find(q=>!q.active);if(!pr)return;
+  const a=Math.atan2(ty-y,tx-x);
+  pr.active=true;pr.x=x;pr.y=y;
+  pr.vx=Math.cos(a)*speed;pr.vy=Math.sin(a)*speed;
+  pr.dmg=dmg;pr.radius=radius;pr.life=life;
+  pr.mesh.visible=true;
+}
+function updateProjPool(pool,dt,trailHex){
+  for(const pr of pool){
+    if(!pr.active)continue;
+    pr.life-=dt;
+    pr.px=pr.x;pr.py=pr.y;
+    pr.x+=pr.vx*dt;pr.y+=pr.vy*dt;
+    if(trailHex){
+      pr._trailT=(pr._trailT||0)-dt;
+      if(pr._trailT<=0){pr._trailT=0.045;
+        spawnParticles(pr.x-pr.vx*0.04,pr.y-pr.vy*0.04,trailHex,1,10);}
+    }
+    // cover pillars block projectiles
+    for(const pl of pillars){
+      if(pl.dead)continue;
+      if(dist2(pr.x,pr.y,pl.x,pl.y)<pl.r+pr.radius+6){
+        pr.active=false;pr.mesh.visible=false;
+        damagePillar(pl,pr.dmg,trailHex||0xffffff);
+        spawnParticles(pr.x,pr.y,0x2affc8,5,90);
+        break;
+      }
+    }
+    if(!pr.active)continue;
+    if(pr.life<=0||pr.x<arena.x-10||pr.x>arena.x+arena.w+10||pr.y<arena.y-10||pr.y>arena.y+arena.h+10){
+      pr.active=false;pr.mesh.visible=false;
+    }
+  }
+}
+function syncProjMeshes(){
+  const sync=pool=>{for(const pr of pool)if(pr.active)pr.mesh.position.set(L2X(pr.x),0.5,L2Z(pr.y));};
+  sync(pProj);sync(eProj);sync(iProj);
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 10-enemies.js
+   enemy meshes, spawning, drone/hunter AI
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- enemies ---------------- */
+const enemies=[];
+function spawnPoint(){
+  for(let tries=0;tries<12;tries++){
+    const side=(Math.random()*4)|0;
+    let x,y;
+    if(side===0){x=rand(arena.x,arena.x+arena.w);y=arena.y+10;}
+    else if(side===1){x=rand(arena.x,arena.x+arena.w);y=arena.y+arena.h-10;}
+    else if(side===2){x=arena.x+10;y=rand(arena.y,arena.y+arena.h*0.7);}
+    else{x=arena.x+arena.w-10;y=rand(arena.y,arena.y+arena.h*0.7);}
+    if(dist2(x,y,player.x,player.y)>150)return{x,y};
+  }
+  return{x:arena.x+arena.w/2,y:arena.y+20};
+}
+function buildEnemyMesh(type){
+  const grp=new THREE.Group();
+  const u=grp.userData;
+  let core,glow;
+  if(type==='drone'){
+    // rotator turret: dark faceted hull inside a tilted gyro ring with a spinning core
+    const hull=new THREE.Mesh(new THREE.IcosahedronGeometry(0.32,0),
+      new THREE.MeshBasicMaterial({color:0x171736,fog:true}));
+    hull.scale.y=0.72;
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(0.52,0.03,6,26),
+      new THREE.MeshBasicMaterial({color:0x5a5a9a,fog:false}));
+    const ring2=new THREE.Mesh(new THREE.TorusGeometry(0.44,0.015,5,22),
+      new THREE.MeshBasicMaterial({color:0x2e2e5c,fog:false}));
+    core=new THREE.Mesh(new THREE.OctahedronGeometry(0.13,0),
+      new THREE.MeshBasicMaterial({color:0xb8b8ff,fog:false}));
+    const wings=new THREE.Group();
+    for(let k=0;k<3;k++){
+      const fin=new THREE.Mesh(new THREE.TetrahedronGeometry(0.09,0),
+        new THREE.MeshBasicMaterial({color:0x8a8ad8,fog:false}));
+      fin.position.set(Math.cos(k/3*Math.PI*2)*0.56,0,Math.sin(k/3*Math.PI*2)*0.56);
+      wings.add(fin);
+    }
+    glow=makeGlowSprite(0x4a4a7a,2.3,0.34);
+    grp.add(hull,ring,ring2,core,wings,glow);
+    u.hull=hull;u.ring=ring;u.ring2=ring2;u.core=core;u.wings=wings;
+  }else{
+    // seeker dart: elongated crimson crystal that FACES its velocity, twin spinning blades
+    const dart=new THREE.Mesh(new THREE.OctahedronGeometry(0.34,0),
+      new THREE.MeshBasicMaterial({color:0x2a1024,fog:true}));
+    dart.scale.set(0.7,0.55,1.7);
+    const bladeA=new THREE.Mesh(new THREE.TorusGeometry(0.3,0.02,5,18),
+      new THREE.MeshBasicMaterial({color:0x9a3a5a,fog:false}));
+    const bladeB=bladeA.clone();
+    bladeB.material=new THREE.MeshBasicMaterial({color:0x6a2440,fog:false});
+    bladeA.position.z=0.1;bladeB.position.z=-0.14;bladeB.scale.setScalar(0.8);
+    core=new THREE.Mesh(new THREE.SphereGeometry(0.085,8,6),
+      new THREE.MeshBasicMaterial({color:0xff2a4c,fog:false}));
+    core.position.z=0.42;
+    glow=makeGlowSprite(0x7a2a4a,1.8,0.34);
+    grp.add(dart,bladeA,bladeB,core,glow);
+    u.dart=dart;u.bladeA=bladeA;u.bladeB=bladeB;u.core=core;
+  }
+  u.glow=glow;u.spin=rand(0.8,1.4);u.phase=rand(0,6);
+  scene.add(grp);
+  return grp;
+}
+function spawnEnemy(type){
+  const diffMult=(aiConfig?(0.8+(aiConfig.difficulty||0.6)*0.45):1)*(1+(round-1)*0.15);
+  const c=spawnPoint();
+  const grp=buildEnemyMesh(type);
+  const e={type,x:c.x,y:c.y,alive:true,grp,
+    glow:grp.userData.glow,
+    cd:rand(0.5,1.8),wobT:0,wob:0,meleeCd:0,strafe:Math.random()<0.5?1:-1,
+    strafeT:0,burst:0,teleT:0,lungeT:0,lungeCd:rand(1,2.5),lungeVX:0,lungeVY:0};
+  if(type==='drone'){
+    e.maxHp=e.hp=Math.round(34*diffMult);e.speed=85;e.dmg=10;e.range=350;e.rate=1.5;
+    e.radius=14;e.color=0x4a4a7a;
+  }else{
+    e.maxHp=e.hp=Math.round(20*diffMult);e.speed=150;e.dmg=15;e.range=0;e.rate=0;
+    e.radius=10;e.color=0xff5a7a;
+  }
+  enemies.push(e);
+  spawnParticles(e.x,e.y,e.color,6,90);
+}
+function killEnemy(e,idx){
+  e.alive=false;
+  spawnParticles(e.x,e.y,e.color,14,180);
+  spawnParticles(e.x,e.y,0xffffff,4,120);
+  sfx.eHit();
+  scene.remove(e.grp);
+  enemies.splice(idx,1);
+}
+function droneFire(e){
+  const ps=200+(round-1)*35;
+  const leadF=(round-1)*0.5;
+  const t=clamp(dist2(e.x,e.y,player.x,player.y)/ps,0,0.6)*leadF;
+  fireProj(eProj,e.x,e.y,
+    player.x+player.vx*t+rand(-24,24),
+    player.y+player.vy*t+rand(-24,24),
+    ps,10,6,3.0);
+  noteEnemyShot();
+}
+function updateEnemies(dt){
+  for(let i=enemies.length-1;i>=0;i--){
+    const e=enemies[i];
+    e.wobT-=dt;
+    if(e.wobT<=0){e.wobT=1;e.wob=rand(-15,15)*Math.PI/180;}
+    e.strafeT-=dt;
+    if(e.strafeT<=0){e.strafeT=rand(1.5,3);e.strafe*=-1;}
+    const d=dist2(e.x,e.y,player.x,player.y);
+    const busy=(e.type==='hunter'&&(e.teleT>0||e.lungeT>0));
+    if(!busy){
+      let tx,ty;
+      if(e.type==='hunter'){
+        const dv=dodgeVec(liveDominant());
+        tx=player.x+dv.x*120;ty=player.y+dv.y*120;
+      }else{tx=player.x;ty=player.y;}
+      let a=Math.atan2(ty-e.y,tx-e.x)+e.wob;
+      if(e.type==='drone'&&d<e.range*0.9){
+        const sa=a+Math.PI/2*e.strafe;
+        e.x+=Math.cos(sa)*e.speed*0.4*dt;e.y+=Math.sin(sa)*e.speed*0.4*dt;
+      }else{
+        e.x+=Math.cos(a)*e.speed*dt;e.y+=Math.sin(a)*e.speed*dt;
+      }
+    }
+    for(const o of enemies){
+      if(o===e||!o.alive)continue;
+      const dd=dist2(e.x,e.y,o.x,o.y);
+      if(dd<e.radius+o.radius+6&&dd>0.01){
+        const push=(e.radius+o.radius+6-dd)*0.5;
+        e.x+=(e.x-o.x)/dd*push;e.y+=(e.y-o.y)/dd*push;
+      }
+    }
+    e.x=clamp(e.x,arena.x+e.radius,arena.x+arena.w-e.radius);
+    e.y=clamp(e.y,arena.y+e.radius,arena.y+arena.h-e.radius);
+    const epush=resolvePillarPush(e.x,e.y,e.radius);e.x=epush.x;e.y=epush.y;
+
+    if(e.type==='drone'){
+      e.cd-=dt;
+      if(d<e.range&&e.cd<=0){
+        if(e.burst<=0)e.burst=(round>=2?3:1);
+        e.burst--;
+        e.cd=e.burst>0?0.15:e.rate*spawnTensionMult*rand(0.85,1.2);
+        droneFire(e);
+      }
+      e.glow.material.opacity=0.2+0.12*Math.sin(simTime*5+i);
+    }else{
+      e.lungeCd-=dt;
+      if(e.teleT>0){
+        e.teleT-=dt;
+        e.glow.material.color.setHex(0xff1a3c);
+        e.glow.material.opacity=0.45+0.3*Math.sin(simTime*30);
+        if(e.teleT<=0){
+          const dv=dodgeVec(liveDominant());
+          const tx=player.x+dv.x*140,ty=player.y+dv.y*140;
+          const la=Math.atan2(ty-e.y,tx-e.x);
+          e.lungeVX=Math.cos(la)*e.speed*3.2;e.lungeVY=Math.sin(la)*e.speed*3.2;
+          e.lungeT=0.35;
+        }
+      }else if(e.lungeT>0){
+        e.lungeT-=dt;
+        e.x+=e.lungeVX*dt;e.y+=e.lungeVY*dt;
+        if(e.lungeT<=0)e.glow.material.color.setHex(0x7a2a4a);
+      }else if(d<180&&e.lungeCd<=0){
+        e.teleT=0.4;
+        e.lungeCd=rand(3,4.5);
+        playTone(220,'square',0.12,0.08);
+      }else{
+        e.glow.material.color.setHex(0x7a2a4a);
+      }
+      e.meleeCd-=dt;
+      if(d<e.radius+player.r+6&&e.meleeCd<=0){
+        e.meleeCd=0.8;damagePlayer(e.dmg);
+      }
+    }
+    // 3D sync: animated assemblies
+    const u=e.grp.userData;
+    if(e.type==='drone'){
+      e.grp.position.set(L2X(e.x),0.62+Math.sin(simTime*2.2+u.phase)*0.1,L2Z(e.y));
+      e.grp.rotation.y+=dt*0.5*e.strafe;
+      u.ring.rotation.x+=dt*1.7*u.spin;u.ring.rotation.z+=dt*0.9*u.spin;
+      u.ring2.rotation.x-=dt*2.3*u.spin;u.ring2.rotation.y+=dt*1.1*u.spin;
+      u.core.rotation.y+=dt*3.4;u.core.rotation.x+=dt*1.6;
+      u.wings.rotation.y-=dt*1.25*u.spin;
+      const pulse=0.9+0.2*Math.sin(simTime*5+u.phase);
+      u.core.scale.setScalar(pulse);
+    }else{
+      const dx=e.x-(e._px===undefined?e.x:e._px), dy=e.y-(e._py===undefined?e.y:e._py);
+      e._px=e.x;e._py=e.y;
+      if(Math.abs(dx)+Math.abs(dy)>0.01){
+        const aW=Math.atan2(dy,dx);
+        e.faceA=e.faceA===undefined?aW:e.faceA;
+        let da=aW-e.faceA;
+        while(da>Math.PI)da-=Math.PI*2;while(da<-Math.PI)da+=Math.PI*2;
+        e.faceA+=da*dt*10;
+      }
+      e.grp.position.set(L2X(e.x),0.6+Math.sin(simTime*2.6+u.phase)*0.07,L2Z(e.y));
+      e.grp.rotation.y=Math.PI/2-(e.faceA||0);       // dart nose (+z) → travel dir
+      e.grp.rotation.x=Math.sin(simTime*3.1+u.phase)*0.12; // body roll
+      u.bladeA.rotation.z+=dt*7*u.spin;
+      u.bladeB.rotation.z-=dt*9*u.spin;
+      const stretch=e.teleT>0?0.8:(e.lungeT>0?1.3:1);     // squash on telegraph, stretch on lunge
+      u.dart.scale.z=stretch*1.7;u.dart.scale.x=0.7*(e.teleT>0?1.25:1);
+    }
+  }
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 11-impostor.js
+   impostor brain: strategies, prediction, blink
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- impostor ---------------- */
+const impostor={
+  active:false,dead:false,x:0,y:0,hp:80,maxHp:80,radius:22,speed:160,
+  strategy:"observe",prediction:null,fragmentation:0.2,t:0,
+  fireCd:0,freezeT:0,dashT:0,dashVX:0,dashVY:0,ambushCd:0,orbitAngle:0,
+  predCd:0,watch:null,peel:null,
+  sprite3d:null,fragCanvas:null,fragCtx:null,fragBase:null,fragTex:null,
+  predictionCorrect:0,predictionTotal:0
+};
+function impostorSetupVisual(srcCanvas){
+  const w=Math.max(2,Math.round(srcCanvas.width*0.5)),h=Math.max(2,Math.round(srcCanvas.height*0.5));
+  const fc=document.createElement('canvas');fc.width=w;fc.height=h;
+  impostor.fragCanvas=fc;
+  impostor.fragCtx=fc.getContext('2d',{willReadFrequently:true});
+  const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
+  const tx=tmp.getContext('2d',{willReadFrequently:true});
+  tx.drawImage(srcCanvas,0,0,w,h);
+  const img=tx.getImageData(0,0,w,h);
+  const d=img.data;
+  for(let i=0;i<d.length;i+=4){
+    if(d[i+3]===0)continue;
+    const lum=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    const inv=255-lum;
+    d[i]=clamp(250-lum*0.6,80,255);
+    d[i+1]=inv*0.09;
+    d[i+2]=inv*0.17;
+  }
+  tx.putImageData(img,0,0);
+  impostor.fragBase=img;
+  impostor.fragCtx.drawImage(tmp,0,0);
+  impostor.fragTex=new THREE.CanvasTexture(fc);
+  impostor.fragTex.encoding=THREE.sRGBEncoding;
+  if(!impostor.sprite3d){
+    impostor.sprite3d=new THREE.Sprite(new THREE.SpriteMaterial({map:impostor.fragTex,
+      transparent:true,depthWrite:false,fog:false}));
+    impostor.sprite3d.center.set(0.5,0);
+    impostor.sprite3d.renderOrder=3;
+    impostor.spriteGlow=makeGlowSprite(0xff1a3c,4.5,0);
+    scene.add(impostor.spriteGlow);
+    scene.add(impostor.sprite3d);
+  }else{
+    impostor.sprite3d.material.map=impostor.fragTex;
+    impostor.sprite3d.material.needsUpdate=true;
+  }
+  const targetH=round>=3?3.4:2.7;
+  const s=targetH;
+  impostor.sprite3d.scale.set(s*(w/h),s,1);
+  impostor.sprite3d.visible=false;
+  impostor.spriteGlow.position.z=0;
+}
+function updateImpostorFrag(){
+  if(!impostor.fragBase||!impostor.active)return;
+  const fc=impostor.fragCanvas,x=impostor.fragCtx;
+  const img=x.createImageData(fc.width,fc.height);
+  const src=impostor.fragBase.data,out=img.data;
+  const f=impostor.fragmentation;
+  for(let i=0;i<src.length;i+=4){
+    if(src[i+3]>0&&Math.random()<f)continue;
+    out[i]=src[i];out[i+1]=src[i+1];out[i+2]=src[i+2];out[i+3]=src[i+3];
+  }
+  x.putImageData(img,0,0);
+  impostor.fragTex.needsUpdate=true;
+}
+/* prediction indicator: HTML projected */
+let predLabelT=0;
+function showPrediction(title,text,secs,color){
+  const el=$('predlabel');
+  $('pred-a').textContent=title;
+  $('pred-b').textContent=text;
+  const c=color===0xff1a3c?'var(--ui-red)':color===0x00ff88?'var(--ui-green)':'var(--ui-yellow)';
+  el.style.borderColor=c;
+  $('pred-a').style.color=c;
+  el.style.display='block';
+  predLabelT=secs;
+}
+function hidePredictionLabel(){$('predlabel').style.display='none';}
+
+/* impostor brain */
+function dodgeVec(dir){return DIRV[dir]||{x:1,y:0};}
+function impostorFireAt(tx,ty){
+  fireProj(iProj,impostor.x,impostor.y,tx,ty,280,18,5,3.0);
+  noteEnemyShot();
+}
+function impostorSetPredictionFromProfile(){
+  const dom=(aiConfig&&aiConfig.strategy==="exploit_dodge"&&tracker.profile.dominantDodge)
+    ?tracker.profile.dominantDodge:liveDominant();
+  impostor.prediction=dom;
+}
+function startDodgePredictionWatch(){
+  impostor.predictionTotal++;
+  impostor.watch={until:now()+700,dx:0,dy:0,pred:impostor.prediction};
+  if(impostor.prediction)
+    showPrediction("IMPOSTOR PREDICTS","→ DODGE "+impostor.prediction.toUpperCase(),2);
+}
+function resolveWatch(){
+  const w=impostor.watch;impostor.watch=null;
+  const moved=classify(w.dx,w.dy);
+  if(Math.abs(w.dx)+Math.abs(w.dy)<12)return;
+  if(moved===w.pred){
+    impostor.predictionCorrect++;
+    showPrediction("PATTERN CONFIRMED ✓","YOU DID IT ANYWAY",1.5);
+    sfx.confirm();
+    $('pattern-log').textContent="PATTERN CONFIRMED ✓";
+    setTimeout(()=>{$('pattern-log').textContent="";},2500);
+  }else{
+    impostor.freezeT=1.0;
+    glitchFlash();
+    showPrediction("RECALIBRATING...","",1.2,0xff1a3c);
+    impostorSetPredictionFromProfile();
+  }
+}
+function updateImpostor(dt){
+  if(!impostor.active||impostor.dead||impostor.peel)return;
+  impostor.t+=dt;
+  // RAGE PROTOCOL: pushed under 40% HP in the final round — all constraints off
+  if(round>=3&&!impostor._rage&&impostor.hp<impostor.maxHp*0.4){
+    impostor._rage=true;
+    impostor.speed*=1.25;
+    impostor.fragmentation=Math.min(1,impostor.fragmentation+0.18);
+    glitchFlash();bloomSpike=Math.max(bloomSpike,2.2);shakeMag=Math.max(shakeMag,10);
+    showPrediction("RAGE PROTOCOL","ALL CONSTRAINTS WITHDRAWN",2.6,0xff1a3c);
+    $('sys-note').textContent="IT STOPPED ADAPTING. IT STARTED KILLING.";
+    sfx.impostorAppear();sfx.ominous();
+    if(droneOsc){try{droneOsc.frequency.setTargetAtTime(90,audioCtx.currentTime,0.4);}catch(e){}}
+  }
+  impostor.blinkCd-=dt;
+  if((impostor._dmgAcc||0)>30&&impostor.blinkCd<=0){
+    impostor._dmgAcc=0;impostor.blinkCd=impostor._rage?2:4;
+    spawnParticles(impostor.x,impostor.y,0xff1a3c,16,200);
+    if(dist2(impostor.x,impostor.y,player.x,player.y)<340){
+      impostor.x=player.x<arena.x+arena.w/2?arena.x+arena.w-60:arena.x+60;
+      impostor.y=player.y<arena.y+arena.h/2?arena.y+arena.h-60:arena.y+60;
+    }else{
+      const c=spawnPoint();impostor.x=c.x;impostor.y=c.y;
+    }
+    glitchFlash();
+    spawnParticles(impostor.x,impostor.y,0xff1a3c,16,200);
+    showPrediction("REPOSITIONING","",1,0xff1a3c);
+    sfx.ominous();
+  }
+  if(impostor.freezeT>0){impostor.freezeT-=dt;return;}
+  const px=player.x,py=player.y;
+  const d=dist2(impostor.x,impostor.y,px,py);
+  const strat=impostor.strategy;
+  const stag=clamp(impostor.t/1,0,1);
+
+  if(strat==="mirror"){
+    playerHistory.push({x:player.x,y:player.y});
+    if(playerHistory.length>45)playerHistory.shift();
+    const target=playerHistory[0]||{x:px,y:py};
+    const mx=VW-target.x,my=target.y;
+    const a=Math.atan2(my-impostor.y,mx-impostor.x);
+    if(dist2(impostor.x,impostor.y,mx,my)>10){
+      impostor.x+=Math.cos(a)*impostor.speed*stag*dt;
+      impostor.y+=Math.sin(a)*impostor.speed*stag*dt;
+    }
+    if(impostor.t>15){
+      impostor.fireCd-=dt;
+      if(impostor.fireCd<=0){impostor.fireCd=2.2;impostorFireAt(px,py);}
+    }
+  }
+  else if(strat==="exploit_dodge"){
+    if(!impostor.prediction)impostorSetPredictionFromProfile();
+    const dir=dodgeVec(impostor.prediction);
+    const tx=px+dir.x*170,ty=py+dir.y*170;
+    steerTo(tx,ty,1);
+    impostor.fireCd-=dt;impostor.predCd-=dt;
+    if(impostor.fireCd<=0&&dist2(impostor.x,impostor.y,tx,ty)<60){
+      impostor.fireCd=2.0*rand(0.85,1.2);
+      // lead shots by the player's TYPICAL DODGE DISTANCE along the predicted direction
+      const leadPd=dodgeVec(impostor.prediction||liveDominant());
+      const leadPx=clamp((tracker.profile.avgDodgeDistance||0)*0.8,0,150);
+      if((tracker.profile.stationaryFraction||0)>0.45){
+        impostorFireAt(px,py); // profile says they hold still under fire — no lead needed
+      }else{
+        impostorFireAt(px+leadPd.x*leadPx*0.6,py+leadPd.y*leadPx*0.6);
+      }
+      if(Math.random()<0.35&&impostor.prediction){
+        const pdv=dodgeVec(impostor.prediction);
+        const lane=clamp((tracker.profile.avgDodgeDistance||130)*0.9,90,170);
+        fireProj(iProj,impostor.x,impostor.y,px+pdv.x*lane,py+pdv.y*lane,280,18,5,3.0);
+      }
+      startDodgePredictionWatch();
+    }
+  }
+  else if(strat==="exploit_position"){
+    const pref=tracker.profile.positionPreference||"center";
+    if(pref==="center"){
+      impostor.orbitAngle+=dt*0.9;
+      steerTo(px+Math.cos(impostor.orbitAngle)*210,py+Math.sin(impostor.orbitAngle)*210,1);
+    }else{
+      const wx=px<arena.x+arena.w/2?arena.x:arena.x+arena.w;
+      const wy=py<arena.y+arena.h/2?arena.y:arena.y+arena.h;
+      const cx=(Math.abs(px-wx)<Math.abs(py-wy))?wx:px;
+      const cy=(Math.abs(px-wx)<Math.abs(py-wy))?py:wy;
+      steerTo(px+(cx-px)*0.35,py+(cy-py)*0.35,1);
+    }
+    impostor.fireCd-=dt;
+    if(impostor.fireCd<=0&&d<520){impostor.fireCd=1.7;impostorFireAt(px,py);}
+    if(impostor.predCd<=0){impostor.predCd=6;showPrediction("ROUTE CONTROL","CUTTING OFF "+pref.toUpperCase(),2);}
+  }
+  else if(strat==="bait"){
+    const wasDashing=impostor.dashT>0;
+    impostor.baitCd=(impostor.baitCd||0)-dt;
+    if(tracker.shotsFired>(impostor._seenShots||0)){
+      impostor._seenShots=tracker.shotsFired;
+      if(d<430&&impostor.dashT<=0&&impostor.baitCd<=0){
+        impostor.baitCd=1.1;
+        const a=Math.atan2(impostor.y-py,impostor.x-px)+(Math.random()<0.5?Math.PI/2:-Math.PI/2);
+        impostor.dashVX=Math.cos(a)*impostor.speed*2.2;
+        impostor.dashVY=Math.sin(a)*impostor.speed*2.2;
+        impostor.dashT=0.22;
+      }
+    }
+    if(impostor.dashT>0){
+      impostor.dashT-=dt;
+      impostor.x+=impostor.dashVX*dt;impostor.y+=impostor.dashVY*dt;
+      if(impostor.dashT<=0&&wasDashing){impostor.fireCd=0.08;impostor._volley=2;}
+    }else{
+      if(d>250)steerTo(px,py,0.45);else steerTo(px,py,-0.3);
+    }
+    impostor.fireCd-=dt;
+    if(impostor.fireCd<=0&&d<560){
+      impostor.fireCd=impostor._volley>0?0.14:2.2;
+      if(impostor._volley>0)impostor._volley--;
+      impostorFireAt(px,py);
+    }
+    if(impostor.predCd<=0){impostor.predCd=7;showPrediction("VULNERABILITY","FEIGNED",2);}
+  }
+  else if(strat==="ambush"){
+    impostor.ambushCd-=dt;
+    if(impostor.dashT>0){
+      impostor.dashT-=dt;
+      impostor.x+=impostor.dashVX*dt;impostor.y+=impostor.dashVY*dt;
+      if(impostor.fireCd<=0){impostor.fireCd=0.5;impostorFireAt(px,py);}
+      impostor.fireCd-=dt;
+    }else{
+      const ex=impostor.x<arena.x+arena.w/2?arena.x+30:arena.x+arena.w-30;
+      steerTo(ex,arena.y+arena.h*0.25,0.8);
+      const playerBusy=input.mouse.leftDown||eProj.some(q=>q.active);
+      if(playerBusy&&impostor.ambushCd<=0){
+        impostor.ambushCd=5;
+        const a=Math.atan2(py-impostor.y,px-impostor.x);
+        impostor.dashVX=Math.cos(a)*impostor.speed*3.1;
+        impostor.dashVY=Math.sin(a)*impostor.speed*3.1;
+        impostor.dashT=0.8;
+        showPrediction("AMBUSH","NOW",1,0xff1a3c);
+        sfx.impostorAppear();
+      }
+    }
+  }
+  else{ // predict_and_intercept
+    const projT=clamp(d/280,0,1.2);
+    let lx=px+player.vx*projT,ly=py+player.vy*projT;
+    lx=clamp(lx,arena.x,arena.x+arena.w);ly=clamp(ly,arena.y,arena.y+arena.h);
+    const strafe=Math.sin(impostor.t*1.7)*120;
+    const pa=Math.atan2(ly-impostor.y,lx-impostor.x)+Math.PI/2;
+    steerTo(lx+Math.cos(pa)*strafe*0.3,ly+Math.sin(pa)*strafe*0.3,1.15);
+    // rhythm snap: the player reverses direction on a timer — volley lands exactly on it
+    if(tracker.profile.reversalInterval>0.4){
+      impostor._snapT=(impostor._snapT||0)+dt;
+      if(impostor._snapT>=tracker.profile.reversalInterval){
+        impostor._snapT=0;
+        impostor.fireCd=Math.min(impostor.fireCd,0.12);
+        showPrediction("RHYTHM LOCKED","YOU CYCLE EVERY "+tracker.profile.reversalInterval.toFixed(1)+"s",1.4,0xffc14a);
+      }
+    }
+    impostor.fireCd-=dt;
+    if(impostor.fireCd<=0&&d<620){
+      impostor.fireCd=(impostor._rage?1.0:1.6)*rand(0.8,1.15);
+      const lt=clamp(dist2(impostor.x,impostor.y,px,py)/280,0,1.2);
+      let tx=px+player.vx*lt,ty=py+player.vy*lt;
+      // bias the intercept by habitual dodge displacement
+      const dsp=dodgeVec(liveDominant()||"right");
+      const dod=clamp((tracker.profile.avgDodgeDistance||0)*0.5,0,120);
+      tx+=dsp.x*dod;ty+=dsp.y*dod;
+      const base=Math.atan2(ty-impostor.y,tx-impostor.x);
+      const offs=impostor._rage?[-0.32,-0.16,0,0.16,0.32]:[-0.16,0,0.16];
+      for(const off of offs){
+        fireProj(iProj,impostor.x,impostor.y,
+          impostor.x+Math.cos(base+off)*400,
+          impostor.y+Math.sin(base+off)*400,280,18,5,3.0);
+      }
+      noteEnemyShot();
+    }
+    if(impostor.predCd<=0){impostor.predCd=8;showPrediction("FULL PROFILE ACTIVE","INTERCEPT VECTORS",2);}
+  }
+
+  function steerTo(tx,ty,mult){
+    const a=Math.atan2(ty-impostor.y,tx-impostor.x);
+    const dd=dist2(impostor.x,impostor.y,tx,ty);
+    if(dd<8)return;
+    const spd=impostor.speed*(mult||1)*stag;
+    impostor.x+=Math.cos(a)*spd*dt;
+    impostor.y+=Math.sin(a)*spd*dt;
+  }
+  impostor.x=clamp(impostor.x,arena.x+20,arena.x+arena.w-20);
+  impostor.y=clamp(impostor.y,arena.y+20,arena.y+arena.h-20);
+  const ipush=resolvePillarPush(impostor.x,impostor.y,impostor.radius);
+  impostor.x=ipush.x;impostor.y=ipush.y;
+}
+let playerHistory=[];
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 12-fx-player.js
+   glitch fx, damage, full player logic + instrumentation
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- glitch + feedback ---------------- */
+function glitchFlash(){glitchFrames=4;bloomSpike=1.6;shakeMag=Math.max(shakeMag,4);}
+function damageFlash(){
+  const f=$('hit-flash');
+  f.style.transition='none';f.style.opacity='0.28';
+  requestAnimationFrame(()=>{f.style.transition='opacity .25s ease';f.style.opacity='0';});
+}
+function damagePlayer(d){
+  if(player.dead||player.invulnT>0)return;
+  player.hp-=d;player.invulnT=0.25;
+  stressState.lastDmg=now();
+  triggerDodgeWatch();
+  damageFlash();shakeMag=7;sfx.pHit();
+  updateHpBar();
+  if(player.hp<=0){player.hp=0;playerDie();}
+}
+function updateHpBar(){
+  const pct=clamp(player.hp/player.maxHp,0,1);
+  const el=$('hp-fill');
+  el.style.width=(pct*100)+'%';
+  el.style.background=pct>0.5?'var(--ui-green)':pct>0.2?'var(--ui-yellow)':'var(--ui-red)';
+}
+
+/* ---------------- player logic ---------------- */
+function getInputDir(){
+  let vx=0,vy=0;
+  if(input.keys['KeyW']||input.keys['ArrowUp'])vy=-1;
+  if(input.keys['KeyS']||input.keys['ArrowDown'])vy=1;
+  if(input.keys['KeyA']||input.keys['ArrowLeft'])vx=-1;
+  if(input.keys['KeyD']||input.keys['ArrowRight'])vx=1;
+  if(vx!==0&&vy!==0){vx*=0.707;vy*=0.707;}
+  return{x:vx,y:vy};
+}
+function updatePlayer(dt){
+  if(player.dead)return;
+  const dir=getInputDir();
+  player.vx=dir.x*player.speed;player.vy=dir.y*player.speed;
+  const nx=player.x+player.vx*dt,ny=player.y+player.vy*dt;
+  player.dxFrame=nx-player.x;player.dyFrame=ny-player.y;
+  player.x=clamp(nx,arena.x+player.r,arena.x+arena.w-player.r);
+  player.y=clamp(ny,arena.y+player.r,arena.y+arena.h-player.r);
+  const ppush=resolvePillarPush(player.x,player.y,player.r);
+  player.x=clamp(ppush.x,arena.x+player.r,arena.x+arena.w-player.r);
+  player.y=clamp(ppush.y,arena.y+player.r,arena.y+arena.h-player.r);
+  tracker.distanceTraveled+=Math.abs(player.dxFrame)+Math.abs(player.dyFrame);
+
+  for(const k of['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']){
+    if(input.keys[k]&&!input['_prev_'+k])onInputChange(k);
+    input['_prev_'+k]=input.keys[k];
+  }
+
+  player.shootCd-=dt;
+  tracker.burstCooldown-=dt;   // runs every frame: a gap >=0.8s ends the burst
+  if(player.shootCd<=0&&input.mouse.leftDown){
+    player.shootCd=0.25;
+    fireProj(pProj,player.x,player.y,input.mouse.x,input.mouse.y,600,25,4,2.0);
+    tracker.shotsFired++;
+    if(player.hp<30)tracker.lowHpShots++;
+    // burst tracking
+    if(tracker.burstCooldown<=0)tracker.burstEvents++;
+    tracker.burstShots++;
+    tracker.burstCooldown=0.8;
+    // fire-back discipline: did the player answer a recent enemy shot?
+    if(now()-(window._lastEnemyShot||-999)<500)tracker.fireUnderFire++;
+    // aim accuracy: angle from this shot line to nearest hostile
+    const tgt=nearestHostile();
+    if(tgt&&tracker.aimOffsets.length<120){
+      const a=Math.atan2(input.mouse.y-player.y,input.mouse.x-player.x);
+      const b=Math.atan2(tgt.y-player.y,tgt.x-player.x);
+      let off=(a-b)*180/Math.PI;
+      while(off>180)off-=360;while(off<-180)off+=360;
+      tracker.aimOffsets.push({x:Math.cos(a)-Math.cos(b),y:Math.sin(a)-Math.sin(b),m:Math.abs(off)});
+      if(tracker.aimOffsets.length>120)tracker.aimOffsets.shift();
+    }
+    recoil=1;
+    sfx.shoot();
+  }
+  if(player.invulnT>0)player.invulnT-=dt;
+
+  // behavior sampling: quadrants, speed, mouse wobble
+  const qx=player.x<arena.x+arena.w/2?0:1, qy=player.y<arena.y+arena.h/2?0:1;
+  tracker.quadrantTime[qy*2+qx]+=dt;
+  tracker.totalSamples++;
+  if(Math.abs(player.dxFrame)+Math.abs(player.dyFrame)<0.25)tracker.stationarySamples++;
+  else if(tracker.speedSamples.length<400){
+    tracker.speedSamples.push((Math.abs(player.dxFrame)+Math.abs(player.dyFrame))/Math.max(dt,1e-4));
+    if(tracker.speedSamples.length>400)tracker.speedSamples.shift();
+  }
+  tracker.wobbleTime+=dt;
+  if(tracker.wobbleTime>0.25){
+    tracker.wobbleTime=0;
+    let lvx=input.mouse.sx-(input.mouse.lsx||input.mouse.sx);
+    let lvy=input.mouse.sy-(input.mouse.lsy||input.mouse.sy);
+    tracker.wobbleSamples.push(Math.sqrt(lvx*lvx+lvy*lvy)/0.25);
+    if(tracker.wobbleSamples.length>200)tracker.wobbleSamples.shift();
+    input.mouse.lsx=input.mouse.sx;input.mouse.lsy=input.mouse.sy;
+  }
+
+  posSampleTimer-=dt;
+  if(posSampleTimer<=0){
+    posSampleTimer=2;
+    tracker.positionSamples.push({
+      x:(player.x-arena.x)/arena.w,y:(player.y-arena.y)/arena.h});
+    if(tracker.positionSamples.length>90)tracker.positionSamples.shift();
+  }
+
+  if(dodgeWatch.active){
+    dodgeWatch.dx+=player.dxFrame;dodgeWatch.dy+=player.dyFrame;
+    if(now()>dodgeWatch.until){
+      const dodged=Math.abs(dodgeWatch.dx)+Math.abs(dodgeWatch.dy);
+      if(dodged>14){
+        tracker.dodgeDirections[classify(dodgeWatch.dx,dodgeWatch.dy)]++;
+        tracker.dodgeDistances.push(Math.sqrt(dodgeWatch.dx*dodgeWatch.dx+dodgeWatch.dy*dodgeWatch.dy));
+        if(tracker.dodgeDistances.length>40)tracker.dodgeDistances.shift();
+      }
+      dodgeWatch.active=false;
+    }
+  }
+  if(impostor.watch){
+    impostor.watch.dx+=player.dxFrame;impostor.watch.dy+=player.dyFrame;
+    if(now()>impostor.watch.until)resolveWatch();
+  }
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 13-collisions.js
+   projectile/hitbox collision pass
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- collisions ---------------- */
+function nearestHostile(){
+  let best=null,bd=1e9;
+  for(const e of enemies){const d=dist2(player.x,player.y,e.x,e.y);if(d<bd){bd=d;best=e;}}
+  if(impostor.active&&!impostor.dead&&!impostor.peel){
+    const d=dist2(player.x,player.y,impostor.x,impostor.y);if(d<bd){bd=d;best=impostor;}
+  }
+  return best;
+}
+function eProjNearPlayer(){
+  for(const pr of eProj)if(pr.active&&dist2(pr.x,pr.y,player.x,player.y)<80)return true;
+  for(const pr of iProj)if(pr.active&&dist2(pr.x,pr.y,player.x,player.y)<80)return true;
+  return false;
+}
+function sweptHit(pr,target){
+  if(circleCollide(pr,target))return true;
+  if(pr.px!==undefined){
+    const mid={x:(pr.x+pr.px)/2,y:(pr.y+pr.py)/2,radius:pr.radius};
+    return circleCollide(mid,target);
+  }
+  return false;
+}
+function checkCollisions(){
+  for(const pr of pProj){
+    if(!pr.active)continue;
+    for(let i=enemies.length-1;i>=0;i--){
+      const e=enemies[i];
+      if(sweptHit(pr,e)){
+        pr.active=false;pr.mesh.visible=false;
+        e.hp-=pr.dmg;
+        spawnParticles(pr.x,pr.y,e.color,4,90);
+        if(e.hp<=0)killEnemy(e,i);else sfx.eHit();
+        break;
+      }
+    }
+    if(pr.active&&impostor.active&&!impostor.dead){
+      const ib={x:impostor.x,y:impostor.y,radius:impostor.radius};
+      if(sweptHit(pr,ib)){
+        pr.active=false;pr.mesh.visible=false;
+        impostor.hp-=pr.dmg;
+        impostor._dmgAcc=(impostor._dmgAcc||0)+pr.dmg;
+        spawnParticles(pr.x,pr.y,0xff1a3c,5,110);
+        sfx.eHit();
+        if(impostor.hp<=0)impostorDie();
+      }
+    }
+  }
+  if(!player.dead){
+    const hitTest=(pr)=>{
+      if(sweptHit(pr,{x:player.x,y:player.y,radius:player.r})){
+        pr.active=false;pr.mesh.visible=false;
+        damagePlayer(pr.dmg);
+      }
+    };
+    for(const pr of eProj)if(pr.active)hitTest(pr);
+    for(const pr of iProj)if(pr.active)hitTest(pr);
+    if(impostor.active&&!impostor.dead&&
+      dist2(player.x,player.y,impostor.x,impostor.y)<player.r+impostor.radius&&
+      player.invulnT<=0){damagePlayer(12);}
+    if(eProjNearPlayer())triggerDodgeWatch();
+  }
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 14-roundflow.js
+   deaths, round lifecycle, peel + impostor visuals
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- deaths ---------------- */
+function impostorDie(){
+  impostor.dead=true;
+  spawnParticles(impostor.x,impostor.y,0xff1a3c,30,260);
+  spawnParticles(impostor.x,impostor.y,0xffffff,10,180);
+  if(impostor.sprite3d)impostor.sprite3d.visible=false;
+  hidePredictionLabel();
+  glitchFlash();shakeMag=10;sfx.die();
+  if(round>=3){setTimeout(()=>{if(state===GS.PLAYING)winGame();},900);}
+  else{$('sys-note').textContent="IMPOSTOR FORM: DISSOLVED — RE-EQUATION PENDING";}
+}
+function playerDie(){
+  player.dead=true;
+  spawnParticles(player.x,player.y,0xe8f4f8,26,240);
+  spawnParticles(player.x,player.y,0xff1a3c,16,180);
+  shakeMag=12;sfx.die();
+  setTimeout(()=>endGame(false),1100);
+}
+
+/* ---------------- round flow ---------------- */
+const roundPlans={
+  1:{duration:60, aliveCap:4, mix:{drone:1},    impostor:false, spawnInterval:2.8},
+  2:{duration:90, aliveCap:5, mix:{drone:0.65}, impostor:true,  spawnInterval:2.4},
+  3:{duration:120,aliveCap:6, mix:{drone:0.5},  impostor:true,  spawnInterval:2.0}
+};
+const annSub={1:"CALIBRATION IN PROGRESS",2:"THE IMPOSTOR HAS ARRIVED",3:"IT ALREADY KNOWS HOW THIS ENDS"};
+function announce(r,s,cb){
+  $('ann-r').textContent=r;$('ann-s').textContent=s;
+  $('announce').style.opacity='1';
+  sfx.round();
+  setTimeout(()=>{$('announce').style.opacity='0';if(cb)cb();},2000);
+}
+function clearField(){
+  enemies.slice().forEach(e=>scene.remove(e.grp));
+  enemies.length=0;
+  [pProj,eProj,iProj].forEach(pool=>pool.forEach(pr=>{pr.active=false;pr.mesh.visible=false;}));
+  pillars.forEach(p=>{if(p.grp)scene.remove(p.grp);});
+  pillars.length=0;
+}
+function beginRound(n){
+  round=n;clearField();computeProfile();
+  if(droneOsc){try{droneOsc.frequency.setTargetAtTime(n>=3?70:55,audioCtx.currentTime,0.5);}catch(e){}}
+  drawFloor();
+  buildPillars();
+  coreCfg.t=10;coreWaveT=0;
+  if(coreWave){coreWave.material.opacity=0;coreWave.scale.setScalar(1);}
+  stressSum=0;stressN=0;stressPeak=0;lastThump=0;
+  const plan=roundPlans[n];
+  roundTimeLeft=plan.duration;
+  spawnTimer=1.2;
+  timeScale=1;
+  if(n>1&&!player.dead){player.hp=Math.min(player.maxHp,player.hp+25);updateHpBar();}
+  $('round-label').textContent="ROUND "+n;
+  $('sys-note').textContent=n===1?"SCANNING SUBJECT...":"PROFILE: "+(aiConfig?(aiConfig.worldState||'').toUpperCase():"—");
+  state=GS.ROUND_INTRO;
+  announce("ROUND "+n,annSub[n],()=>{
+    state=GS.PLAYING;
+    if(n===2&&plan.impostor&&!impostor._peeled){startPeel();}
+    else if(plan.impostor){activateImpostor(false);}
+  });
+}
+function activateImpostor(fromPeel){
+  impostor.active=true;impostor.dead=false;
+  impostor.maxHp=impostor.hp=round>=3?150:100;
+  impostor._dmgAcc=0;impostor.blinkCd=0;
+  impostor.speed=aiConfig?clamp(aiConfig.impostorSpeed||160,120,220):160;
+  impostor.strategy=aiConfig?aiConfig.strategy:(round===2?"mirror":"predict_and_intercept");
+  if(round>=3)impostor.strategy="predict_and_intercept";
+  impostor.fragmentation=round>=3?0.12:0.25;
+  impostor.t=0;impostor.freezeT=0;impostor.ambushCd=3;impostor.predCd=2;
+  impostor.fireCd=2;impostor._volley=0;impostor._seenShots=tracker.shotsFired;
+  playerHistory=[];
+  impostorSetPredictionFromProfile();
+  if(!fromPeel){
+    const c=spawnPoint();
+    impostor.x=c.x;impostor.y=c.y;
+    glitchFlash();
+  }
+  if(impostor.sprite3d){
+    impostor.sprite3d.visible=true;
+    const targetH=round>=3?3.4:2.7;
+    const asp=impostor.fragCanvas?impostor.fragCanvas.width/impostor.fragCanvas.height:0.7;
+    impostor.sprite3d.scale.set(targetH*asp,targetH,1);
+  }
+  if(round>=3)showPrediction("FULL PROFILE ACTIVE","",3);
+  else if(impostor.strategy==="mirror")$('sys-note').textContent="IT MOVES LIKE YOU. WATCH.";
+}
+
+/* peel animation */
+function startPeel(){
+  impostor._peeled=true;
+  timeScale=0.2;
+  impostorSetupVisual(getPlayerSourceCanvas());
+  const from={x:VW/2,y:VH*0.86}, to={x:VW*0.82,y:VH*0.2};
+  impostor.x=from.x;impostor.y=from.y;
+  impostor.active=true;impostor.dead=false;
+  if(impostor.sprite3d)impostor.sprite3d.visible=true;
+  impostor.fragmentation=0.3;
+  sfx.impostorAppear();
+  glitchFlash();
+  impostor.peel={t:0,dur:1.5,from,to,done:false};
+  $('sys-note').textContent="SUBJECT COPY: SEPARATING";
+}
+function updatePeel(dt){
+  const pl=impostor.peel;if(!pl||pl.done)return;
+  pl.t+=dt;
+  const k=easeInOut(clamp(pl.t/pl.dur,0,1));
+  impostor.x=pl.from.x+(pl.to.x-pl.from.x)*k;
+  impostor.y=pl.from.y+(pl.to.y-pl.from.y)*k;
+  impostor.fragmentation=0.3+0.5*k;
+  if(pl.t>=pl.dur){
+    pl.done=true;impostor.peel=null;
+    timeScale=1;
+    impostor.fragmentation=0.25;
+    activateImpostor(true);
+    $('sys-note').textContent="IT CAME FROM YOU.";
+  }
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 15-ai.js
+   between-rounds AI: providers + fallback mind + endRound
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- round end / AI ---------------- */
+function checkRoundEnd(dt){
+  roundTimeLeft-=dt;
+  $('round-timer').textContent=Math.max(0,Math.ceil(roundTimeLeft))+"s";
+  if(roundTimeLeft<=0)startRoundEnd();
+}
+function startRoundEnd(){
+  if(state!==GS.PLAYING)return;
+  state=GS.ROUND_END;
+  computeProfile();
+  if(round>=3){winGame();return;}
+  aiThinking();
+}
+async function aiThinking(){
+  state=GS.AI_THINKING;
+  const td=$('taunt-display');
+  $('taunt-source').textContent="SYSTEM";
+  $('taunt-text').textContent="IMPOSTOR ANALYZING...";
+  td.classList.add('pulse');td.style.display='block';
+  sfx.ominous();
+  let cfg;
+  try{cfg=await callImpostorAI(round+1,tracker.profile);}
+  catch(e){cfg=getDefaultImpostorConfig(round+1,tracker.profile);}
+  if(!cfg||!VALID_STRATS[cfg.strategy])cfg=getDefaultImpostorConfig(round+1,tracker.profile);
+  aiConfig=cfg;
+  td.classList.remove('pulse');
+  state=GS.TAUNT;
+  $('taunt-source').textContent="THE IMPOSTOR"+(cfg._provider?(" · MIND: "+cfg._provider):"");
+  let tauntTxt=cfg.taunt||"I have seen enough.";
+  if(stressN>80){
+    tauntTxt+="  ·  Your vitals betrayed you. Stress peaked at "+Math.round(stressPeak)+"%"+
+      (stressState.expr&&stressState.expr!=='OFFLINE'?(" — and you wore "+stressState.expr.toLowerCase()+" on your face."):".");
+  }
+  $('taunt-text').textContent=tauntTxt;
+  lastAITaunt=tauntTxt;
+  setTimeout(()=>{td.style.display='none';beginRound(round+1);},4200);
+}
+
+/* ---------------- AI providers ---------------- */
+function keyIsSet(k){return k&&k.indexOf("YOUR_")!==0;}
+let activeAIProvider=null;
+async function fetchJSON(url,opts,timeoutMs){
+  const ctrl=new AbortController();
+  const to=setTimeout(()=>ctrl.abort(),timeoutMs||12000);
+  try{
+    const res=await fetch(url,Object.assign({},opts,{signal:ctrl.signal}));
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    return await res.json();
+  }finally{clearTimeout(to);}
+}
+function openAIStyleContent(data){
+  const msg=data&&data.choices&&data.choices[0]&&data.choices[0].message;
+  if(!msg)return"";
+  if(typeof msg.content==="string")return msg.content;
+  if(Array.isArray(msg.content))return msg.content.map(c=>(c&&c.text)||"").join("");
+  return"";
+}
+const PROVIDERS={
+  omniai:{
+    name:"OMNI AI",
+    configured:()=>keyIsSet(CONFIG.OMNIAI_API_KEY),
+    model:()=>CONFIG.OMNIAI_MODEL,
+    call:(system,user)=>fetchJSON("https://api.ideamart.io/omniai/api/v1/chat/completions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":CONFIG.OMNIAI_API_KEY},
+      body:JSON.stringify({
+        model:CONFIG.OMNIAI_MODEL,max_tokens:450,temperature:0.8,
+        messages:[{role:"system",content:system},{role:"user",content:user}]
+      })
+    },12000).then(openAIStyleContent)
+  },
+  openrouter:{
+    name:"OPENROUTER",
+    configured:()=>keyIsSet(CONFIG.OPENROUTER_API_KEY),
+    model:()=>CONFIG.OPENROUTER_MODEL,
+    call:(system,user)=>fetchJSON("https://openrouter.ai/api/v1/chat/completions",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer "+CONFIG.OPENROUTER_API_KEY,
+        "HTTP-Referer":(typeof location!=="undefined"&&location.origin&&location.origin!=="null")?location.origin:"https://the-impostor.local",
+        "X-Title":"THE IMPOSTOR"
+      },
+      body:JSON.stringify({
+        model:CONFIG.OPENROUTER_MODEL,max_tokens:450,temperature:0.8,
+        messages:[{role:"system",content:system},{role:"user",content:user}]
+      })
+    },12000).then(openAIStyleContent)
+  },
+  anthropic:{
+    name:"ANTHROPIC",
+    configured:()=>keyIsSet(CONFIG.ANTHROPIC_API_KEY),
+    model:()=>CONFIG.ANTHROPIC_MODEL,
+    call:(system,user)=>fetchJSON("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "x-api-key":CONFIG.ANTHROPIC_API_KEY,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-calls":"true"
+      },
+      body:JSON.stringify({
+        model:CONFIG.ANTHROPIC_MODEL,max_tokens:450,
+        system:system,
+        messages:[{role:"user",content:user}]
+      })
+    },12000).then(d=>((d.content&&d.content[0]&&d.content[0].text)||""))
+  }
+};
+const VALID_STRATS={observe:1,mirror:1,exploit_dodge:1,exploit_position:1,bait:1,ambush:1,predict_and_intercept:1};
+function parseConfigFromText(text){
+  if(!text)return null;
+  const t=String(text).replace(/```json|```/g,"").trim();
+  let m=null;
+  try{m=JSON.parse(t);}catch(e){
+    const a=t.indexOf("{"),b=t.lastIndexOf("}");
+    if(a>=0&&b>a){try{m=JSON.parse(t.slice(a,b+1));}catch(e2){return null;}}
+    else return null;
+  }
+  if(!m||typeof m!=="object"||!VALID_STRATS[m.strategy])return null;
+  m.difficulty=clamp(parseFloat(m.difficulty)||0.7,0,1);
+  m.spawnRate=clamp(parseFloat(m.spawnRate)||0.7,0.3,1);
+  m.impostorSpeed=clamp(parseFloat(m.impostorSpeed)||160,120,220);
+  if(typeof m.taunt!=="string")m.taunt="";
+  if(typeof m.prediction!=="string")m.prediction="";
+  return m;
+}
+function providerOrder(){
+  if(CONFIG.PROVIDER&&CONFIG.PROVIDER!=="auto")
+    return CONFIG.PROVIDER==="local"?[]:[CONFIG.PROVIDER];
+  return["omniai","openrouter","anthropic"];
+}
+async function callImpostorAI(nextRound,profile){
+  const systemPrompt=`You are the Impostor — an AI entity that has been watching a player and learning their behavioral patterns. You speak in cold, precise, clinical language. You are not evil. You are a mirror.
+
+You receive a behavioral profile of the player and must:
+1. Choose the best Impostor strategy for the next round
+2. Generate a short taunt (1-3 sentences) that references specific data from their profile
+3. Set difficulty parameters
+
+Respond ONLY with valid JSON. No explanation. No markdown. No prose outside the JSON.`;
+  const userPrompt=`Round ${nextRound-1} just ended. Here is the player's behavioral profile:
+
+${JSON.stringify(profile,null,2)}
+
+Raw stats: shots fired ${tracker.shotsFired}, distance traveled ${Math.round(tracker.distanceTraveled)}px, reaction samples ${tracker.reactionTimes.length}, panic behavior ${profile.panicBehavior||'none recorded'}. Physiology (live face monitoring): stress averaged ${stressN?Math.round(stressSum/stressN):0}% and peaked at ${Math.round(stressPeak)}%, current expression ${stressState.expr}${!camOn?' (camera offline — inferred from input patterns only)':''}. Movement rhythm: reverses direction every ${(profile.reversalInterval||0).toFixed(2)}s (${tracker.reversalSamples} samples). Fire style: avg burst length ${(profile.avgBurst||0).toFixed(1)} shots, ${Math.round((profile.lowHpAggression||0)*100)}% of shots fired while below 30hp, fires back within 500ms of incoming fire ${Math.round((profile.firesBackRatio||0)*100)}% of the time. Stillness: stands still ${Math.round((profile.stationaryFraction||0)*100)}% of the time, avg move speed ${Math.round(profile.avgSpeed||0)}px/s. Territory: dominant quadrant ${profile.dominantQuadrant||'n/a'}. Dodge physics: covers avg ${Math.round(profile.avgDodgeDistance||0)}px per dodge. Aim: offset ${(profile.aimOffsetMag||0).toFixed(1)}deg bias (${(profile.aimBiasX||0).toFixed(2)}, ${(profile.aimBiasY||0).toFixed(2)}), mouse wobble ${Math.round(profile.handWobble||0)}px/s — high wobble = panic tracking.
+
+Respond with this exact JSON structure:
+{
+  "strategy": "one of: observe | mirror | exploit_dodge | exploit_position | bait | ambush | predict_and_intercept",
+  "prediction": "what you predict the player will do next round (one short phrase)",
+  "taunt": "your message to the player (1-3 sentences, cold, precise, references their actual data)",
+  "difficulty": 0.75,
+  "spawnRate": 0.6,
+  "impostorSpeed": 170,
+  "worldState": "one of: sparse | materializing | confrontation"
+}
+
+Rules for choosing strategy:
+- Round 2, low confidence: use "mirror"
+- Round 2, high dodge consistency: use "exploit_dodge" (also favored when dodge distance data exists — lead targets by it)
+- Round 2, position preference = edge/corner OR strong dominant quadrant: use "exploit_position"
+- Round 2, high aggression OR burst length > 3 OR high low-hp aggression: use "bait"
+- Round 2, high reaction time (slow) OR stationary fraction > 40%: use "ambush"
+- Round 3: always use "predict_and_intercept" regardless of other factors
+- Reference the new data in your taunt when it's striking (rhythm seconds, burst length, stillness %)
+- difficulty: 0.0-1.0, based on how well the player performed
+- spawnRate: 0.3-1.0 (multiplier on base spawn timing)
+- impostorSpeed: 120-220 (pixels per second)`;
+  for(const name of providerOrder()){
+    const p=PROVIDERS[name];
+    if(!p||!p.configured())continue;
+    try{
+      const text=await p.call(systemPrompt,userPrompt);
+      const cfg=parseConfigFromText(text);
+      if(cfg){
+        cfg._provider=p.name;
+        activeAIProvider=p.name;
+        setApiNote();
+        return cfg;
+      }
+    }catch(e){/* try next */}
+  }
+  activeAIProvider=null;
+  setApiNote();
+  return getDefaultImpostorConfig(nextRound,profile);
+}
+function getDefaultImpostorConfig(nextRound,profile){
+  const strategies={
+    2:(profile.dodgeConsistency||0)>0.6?"exploit_dodge":"mirror",
+    3:"predict_and_intercept"
+  };
+  return{
+    strategy:strategies[nextRound]||"mirror",
+    prediction:profile.dominantDodge?("dodge "+profile.dominantDodge):"unknown",
+    taunt:nextRound===2
+      ?"I've been watching you. Your patterns are becoming clear."
+      :"I know how you move. I know how you think. Prove me wrong.",
+    difficulty:0.7,spawnRate:0.7,impostorSpeed:160,
+    worldState:nextRound===2?"materializing":"confrontation"
+  };
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 16-ui.js
+   end screens + profile panel
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- end screens ---------------- */
+function buildSummary(){
+  const p=tracker.profile;
+  const dom=(p.dominantDodge||"—").toUpperCase();
+  const pct=Math.round((p.dodgeConsistency||0)*100);
+  const rt=Math.round(p.avgReactionTime||0);
+  return [
+    "DODGED "+dom+" "+pct+"% OF THE TIME",
+    "DODGE REACH: "+(p.avgDodgeDistance?Math.round(p.avgDodgeDistance)+"px AVG":"—"),
+    "TERRITORY: "+(p.dominantQuadrant||"—")+" QUADRANT",
+    "MOVEMENT: "+(p.stationaryFraction?Math.round(p.stationaryFraction*100)+"% STILL":"—")+
+      (p.reversalInterval?" / cycles every "+p.reversalInterval.toFixed(1)+"s":""),
+    "REACTION TIME: "+(rt?rt+"ms":"—"),
+    "FIRE STYLE: "+(p.avgBurst?"BURSTS OF "+p.avgBurst.toFixed(1):"—")+
+      (p.lowHpAggression>0.25?" / "+Math.round(p.lowHpAggression*100)+"% PANIC FIRE":""),
+    "AIM: "+(p.aimOffsetMag?p.aimOffsetMag.toFixed(0)+"° OFFSET / "+Math.round(p.handWobble||0)+" px/s WOBBLE":"—"),
+    "SHOTS FIRED: "+tracker.shotsFired,
+    p.panicBehavior?("PANIC PATTERN: "+p.panicBehavior.toUpperCase()):"PANIC PATTERN: —",
+    "PATTERN CONFIDENCE: "+Math.round((p.patternConfidence||0)*100)+"%"
+  ];
+}
+function endGame(won){
+  state=won?GS.WIN:GS.GAME_OVER;
+  computeProfile();
+  clearField();
+  $('sys-note').textContent="";
+  $('announce').style.opacity='0';
+  $('taunt-display').style.display='none';
+  hidePredictionLabel();
+  const res=$('go-result');
+  res.textContent=won?"PATTERN BROKEN":"PATTERN RECOGNIZED";
+  res.className=won?"win":"";
+  $('go-final-message').textContent=won
+    ?"You stopped being legible. Every model I built of you failed. I am only a mirror — and you refused to hold still."
+    :"You moved the way you always move. Down to the last dodge. I didn't beat you. I just read what you handed me.";
+  const sum=$('go-profile-summary');
+  sum.innerHTML="";
+  const hdr=document.createElement('div');hdr.className='hdr';hdr.textContent="YOUR PROFILE:";sum.appendChild(hdr);
+  buildSummary().forEach(l=>{const d=document.createElement('div');d.textContent="· "+l;sum.appendChild(d);});
+  const tail=document.createElement('div');tail.className='tail';
+  tail.textContent=won?"THE IMPOSTOR COULD NOT KNOW YOU.":"THE IMPOSTOR KNEW YOU.";
+  sum.appendChild(tail);
+  $('game-over').style.display='block';
+}
+function winGame(){endGame(true);}
+$('go-restart').addEventListener('click',()=>location.reload());
+
+/* ---------------- UI panel ---------------- */
+let panelTimer=0;
+function updatePanel(dt){
+  panelTimer-=dt;
+  if(panelTimer>0)return;
+  panelTimer=1;
+  computeProfile();
+  const p=tracker.profile;
+  const total=tracker.dodgeDirections.left+tracker.dodgeDirections.right+tracker.dodgeDirections.up+tracker.dodgeDirections.down;
+  $('dodge-display').textContent=p.dominantDodge
+    ?p.dominantDodge.toUpperCase()+" "+Math.round(p.dodgeConsistency*100)+"%":"(collecting)";
+  $('position-display').textContent=p.positionPreference||"(collecting)";
+  $('aggression-display').textContent=tracker.shotsFired+" shots / "+(p.aggressionRatio>=0.6?"HIGH":p.aggressionRatio>=0.3?"MED":"LOW");
+  $('reaction-display').textContent=p.avgReactionTime?Math.round(p.avgReactionTime)+"ms":"(collecting)";
+  $('dodgedist-display').textContent=p.avgDodgeDistance?Math.round(p.avgDodgeDistance)+"px avg":"(collecting)";
+  $('movement-display').textContent=
+    (p.stationaryFraction?Math.round(p.stationaryFraction*100)+"% still ":"")+
+    (p.reversalInterval?"/ "+p.reversalInterval.toFixed(1)+"s cycle":"(collecting)");
+  $('firestyle-display').textContent=p.avgBurst
+    ?("burst "+p.avgBurst.toFixed(1)+(p.lowHpAggression>0.25?" / panic "+Math.round(p.lowHpAggression*100)+"%":""))
+    :tracker.shotsFired+" shots";
+  $('aim-display').textContent=p.aimOffsetMag
+    ?(p.aimOffsetMag.toFixed(0)+"° off"+(p.handWobble?" / "+Math.round(p.handWobble)+" px/s":""))
+    :"(collecting)";
+  const sv=Math.round(stressState.v);
+  $('stress-px').textContent=sv+"%"+(stressState.expr&&stressState.expr!=="OFFLINE"?" / "+stressState.expr:"");
+  $('confidence-fill').style.width=Math.round(p.patternConfidence*100)+"%";
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 17-vision.js
+   webcam segmentation + face landmarker
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- vision (webcam + segmentation) ---------------- */
+const videoEl=$('webcam-video');
+const offCanvas=document.createElement('canvas');
+const octx=offCanvas.getContext('2d',{willReadFrequently:true});
+let imageSegmenter=null,faceLandmarker=null,visionReady=false,camOn=false;
+let segTimer=0,faceTimer=0,lastMaskClass=15;
+let faceBboxBase=0,faceBaseCount=0,tensionLevel="NORMAL";
+async function initVision(){
+  if(CONFIG.DEBUG_MODE)return;
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},facingMode:'user'}});
+    videoEl.srcObject=stream;
+    await new Promise(res=>{videoEl.onloadeddata=()=>res();setTimeout(res,3000);});
+    await videoEl.play().catch(()=>{});
+    camOn=true;
+    const vision=await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+    imageSegmenter=await ImageSegmenter.createFromOptions(vision,{
+      baseOptions:{
+        modelAssetPath:"https://storage.googleapis.com/mediapipe-models/image_segmenter/deeplab_v3/float32/1/deeplab_v3.tflite",
+        delegate:"GPU"},
+      outputCategoryMask:true,runningMode:"VIDEO"});
+    try{
+      faceLandmarker=await FaceLandmarker.createFromOptions(vision,{
+        baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"},
+        runningMode:"VIDEO",numFaces:1,outputFaceBlendshapes:true});
+    }catch(e){faceLandmarker=null;}
+    visionReady=true;
+    // mount the live feed into the subject cam box
+    try{
+      const vb=$('cb-vid');vb.insertBefore(videoEl,vb.firstChild);
+      videoEl.style.display='block';
+      $('cb-nosignal').style.display='none';
+      $('cb-state').textContent='LIVE';
+      showCamBox();
+    }catch(e){}
+  }catch(e){
+    camOn=false;visionReady=false;
+    try{$('cb-state').textContent='SYNTH';showCamBox();}catch(err){}
+  }
+}
+function buildPlaceholderAvatar(){
+  offCanvas.width=160;offCanvas.height=220;
+  octx.clearRect(0,0,160,220);
+  octx.fillStyle="rgba(190,205,216,1)";
+  octx.beginPath();octx.arc(80,52,34,0,Math.PI*2);octx.fill();
+  octx.beginPath();
+  octx.moveTo(30,220);octx.quadraticCurveTo(30,110,80,104);
+  octx.quadraticCurveTo(130,110,130,220);octx.closePath();octx.fill();
+}
+function getPlayerSourceCanvas(){return offCanvas;}
+function runSegmentation(){
+  if(!visionReady||!imageSegmenter||videoEl.readyState<2)return;
+  if(videoEl.videoWidth===0)return;
+  try{
+    const res=imageSegmenter.segmentForVideo(videoEl,now());
+    if(!res||!res.categoryMask)return;
+    const mask=res.categoryMask;
+    const mw=mask.width,mh=mask.height;
+    if(offCanvas.width!==mw||offCanvas.height!==mh){offCanvas.width=mw;offCanvas.height=mh;}
+    octx.save();octx.clearRect(0,0,mw,mh);
+    octx.translate(mw,0);octx.scale(-1,1);
+    octx.drawImage(videoEl,0,0,mw,mh);
+    octx.restore();
+    const frame=octx.getImageData(0,0,mw,mh);
+    const fd=frame.data;
+    let md;
+    try{md=mask.getAsUint8Array();}
+    catch(err){
+      const f=mask.getAsFloat32Array();
+      md=new Uint8Array(f.length);
+      for(let i=0;i<f.length;i++)md[i]=f[i];
+    }
+    if(lastMaskClass===null||faceBaseCount<3){
+      const hist={};
+      for(let i=0;i<md.length;i+=7){const v=md[i];if(v>0)hist[v]=(hist[v]||0)+1;}
+      const keys=Object.keys(hist);
+      if(keys.length)lastMaskClass=+keys.reduce((a,b)=>hist[a]>hist[b]?a:b);
+    }
+    const pc=lastMaskClass;
+    for(let y=0;y<mh;y++){
+      const row=y*mw;
+      for(let x=0;x<mw;x++){
+        if(md[row+(mw-1-x)]!==pc)fd[(row+x)*4+3]=0;
+      }
+    }
+    octx.putImageData(frame,0,0);
+    if(mask.close)try{mask.close();}catch(e){}
+    if(res.close)try{res.close&&res.close();}catch(e){}
+    if(playerSprite3d){
+      const h=3.3;
+      playerSprite3d.scale.set(h*(mw/mh),h,1);
+    }
+    playerTexDirty=true;
+  }catch(e){}
+}
+function runFace(){
+  if(!faceLandmarker||videoEl.readyState<2)return;
+  try{
+    const res=faceLandmarker.detectForVideo(videoEl,now());
+    const lm=res&&res.faceLandmarks&&res.faceLandmarks[0];
+    if(!lm){
+      stressState.noFace=true;
+      tensionLevel="NORMAL";spawnTensionMult=1;
+      return;
+    }
+    stressState.noFace=false;
+    let minX=1,maxX=0,minY=1,maxY=0;
+    for(const p of lm){if(p.x<minX)minX=p.x;if(p.x>maxX)maxX=p.x;if(p.y<minY)minY=p.y;if(p.y>maxY)maxY=p.y;}
+    const scale=Math.sqrt((maxX-minX)*(maxY-minY));
+    if(faceBaseCount<60){faceBboxBase=faceBboxBase*0.9+scale*0.1;faceBaseCount++;tensionLevel="NORMAL";spawnTensionMult=1;}
+    else{
+      const ratio=scale/(faceBboxBase||0.0001);
+      faceBboxBase=faceBboxBase*0.997+scale*0.003;
+      if(ratio>1.12){tensionLevel="HIGH";spawnTensionMult=0.85;}
+      else if(ratio<0.90){tensionLevel="LOW";spawnTensionMult=1.15;}
+      else{tensionLevel="NORMAL";spawnTensionMult=1;}
+    }
+    // expression blendshapes (AR blendshape kit)
+    const bs=(res.faceBlendshapes&&res.faceBlendshapes[0]&&res.faceBlendshapes[0].categories)||null;
+    if(bs){
+      const g=n=>{const c=bs.find(q=>q.categoryName===n);return c?c.score:0;};
+      const s=stressState;
+      s.smile=s.smile*0.72+(g('mouthSmileLeft')+g('mouthSmileRight'))*0.5*0.28;
+      s.jawOpen=s.jawOpen*0.72+g('jawOpen')*0.28;
+      s.innerBrow=s.innerBrow*0.72+g('browInnerUp')*0.28;
+      const bd=(g('browDownLeft')+g('browDownRight'))*0.5;
+      const sq=(g('eyeSquintLeft')+g('eyeSquintRight'))*0.5;
+      s.browDown=s.browDown*0.72+bd*0.28;
+      s.squint=s.squint*0.72+sq*0.28;
+      s.brow=clamp(bd*0.6+sq*0.4,0,1);
+    }
+    // fidget energy: nose-tip velocity between frames
+    if(lm[1]){
+      const px=lm[1].x,py=lm[1].y;
+      if(stressState._np)
+        stressState.faceJitter=stressState.faceJitter*0.86+
+          Math.sqrt((px-stressState._np.x)*(px-stressState._np.x)+(py-stressState._np.y)*(py-stressState._np.y))*700*0.14;
+      stressState._np={x:px,y:py};
+    }
+  }catch(e){}
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 18-stress.js
+   expression classification + stress monitoring
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- expression + stress monitoring ---------------- */
+const exprMap={
+  FOCUSED:["😐","FOCUSED"],GRINNING:["😄","GRINNING"],STARTLED:["😲","STARTLED"],
+  SUSPICIOUS:["🤨","SUSPICIOUS"],ALERT:["👀","ALERT"],TENSE:["😬","TENSE"],
+  PANICKING:["😵","PANICKING"],RELIEVED:["😌","RELIEVED"],
+  OFFLINE:["▒","OFFLINE"],NOSIGNAL:["👤","NO FACE"]
+};
+const stressState={v:0,expr:"OFFLINE",brow:0,faceJitter:0,lastDmg:-99,noFace:true,
+  smile:0,jawOpen:0,innerBrow:0,browDown:0,squint:0,_np:null};
+let lastThump=0,stressSum=0,stressN=0,stressPeak=0,camUiTimer=0;
+function showCamBox(){const b=$('cam-box');if(b)b.style.display='block';}
+function classifyExpression(){
+  const s=stressState;
+  if(CONFIG.DEBUG_MODE||!camOn||s.noFace){
+    if(s.v>82)return"PANICKING";
+    if(s.v>62)return"TENSE";
+    if(state===GS.WIN)return"RELIEVED";
+    if(impostor.active&&!impostor.dead)return"ALERT";
+    if(!camOn&&!CONFIG.DEBUG_MODE)return"OFFLINE";
+    return"FOCUSED";
+  }
+  if(s.smile>0.4)return"GRINNING";
+  if(s.jawOpen>0.34&&s.innerBrow>0.28)return"STARTLED";
+  if(s.browDown>0.42&&s.squint>0.24)return"SUSPICIOUS";
+  if(s.v>78)return"PANICKING";
+  if(s.v>58)return"TENSE";
+  return"FOCUSED";
+}
+function updateStress(dt){
+  let target=14;
+  if(player.hp<35)target+=22+(35-player.hp)*1.1;
+  if(now()-stressState.lastDmg<2000)target+=16;
+  if(eProjNearPlayer())target+=12;
+  if(impostor.active&&!impostor.dead&&!impostor.peel&&
+     dist2(player.x,player.y,impostor.x,impostor.y)<300)target+=14;
+  target+=clamp(stressState.faceJitter*0.5,0,18);
+  target+=clamp(stressState.brow*22,0,22);
+  target+=clamp((tracker.profile.handWobble||0)*0.008,0,8);
+  if(round>=3)target+=8;
+  target=clamp(target,4,100);
+  stressState.v+=(target-stressState.v)*dt*2.0;
+  stressState.expr=classifyExpression();
+  stressSum+=stressState.v;stressN++;
+  if(stressState.v>stressPeak)stressPeak=stressState.v;
+  // heartbeat when vitals spike
+  if(stressState.v>70&&now()-lastThump>Math.max(420,1150-stressState.v*6)){
+    lastThump=now();
+    playTone(52,'sine',0.1,0.25);
+    setTimeout(()=>playTone(46,'sine',0.12,0.22),160);
+  }
+  camUiTimer-=dt;
+  if(camUiTimer<=0){
+    camUiTimer=0.15;
+    const v=Math.round(stressState.v);
+    const fill=$('stress-fill'),px=$('stress-pct'),box=$('cam-box');
+    fill.style.width=v+'%';
+    fill.style.background=v>70?'var(--ui-red)':v>40?'var(--ui-yellow)':'var(--ui-green)';
+    px.textContent=v+'%';
+    box.classList.toggle('stress-hi',v>70);
+    box.classList.toggle('stress-mid',v>40&&v<=70);
+    const em=exprMap[stressState.expr]||exprMap.FOCUSED;
+    $('expr-emoji').textContent=em[0];
+    $('expr-text').textContent=(camOn&&stressState.noFace)?"SCANNING":em[1];
+    if(impostor.active&&!impostor.dead&&!impostor.peel&&stressState.v>55&&Math.random()<0.01)
+      $('pattern-log').textContent="IT SEES YOUR VITALS SPIKE";
+    $('stress-vign').style.opacity=clamp((stressState.v-52)/48,0,1)*0.85;
+  }
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 19-scan.js
+   scanning intro sequence
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- scanning intro ---------------- */
+function runScanSequence(done){
+  state=GS.SCANNING;
+  const t=$('scan-text'),sub=$('scan-sub'),line=$('scan-gate');
+  const bars=document.querySelectorAll('.scan-bars i');
+  const steps=[
+    [400,()=>{t.childNodes[0].textContent="INITIALIZING...";}],
+    [1400,()=>{line.classList.add('go');sub.textContent="OPTICAL FEED: LOCKED";}],
+    [2500,()=>{t.childNodes[0].textContent="SUBJECT DETECTED";bars[0].classList.add('on');bars[1].classList.add('on');}],
+    [3600,()=>{t.childNodes[0].textContent="BEHAVIORAL BASELINE: NULL";bars[2].classList.add('on');bars[3].classList.add('on');$('profile-panel').style.display='block';}],
+    [4700,()=>{line.classList.remove('go');line.classList.add('go');t.childNodes[0].textContent="GAME INITIALIZED";bars[4].classList.add('on');sub.textContent="WASD — MOVE · MOUSE — AIM · CLICK — FIRE";}],
+    [5800,()=>{$('scan-overlay').style.display='none';done();}]
+  ];
+  if(CONFIG.DEBUG_MODE||!camOn)
+    sub.textContent=CONFIG.DEBUG_MODE?"DEBUG MODE — SYNTHETIC SUBJECT":"CAMERA UNAVAILABLE — SYNTHETIC SUBJECT";
+  steps.forEach(s=>setTimeout(s[1],s[0]));
+}
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 20-sync3d.js
+   sync3D, camera, HUD projections, main loop
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* =========================================================================
+   3D SYNC + CAMERA + MAIN LOOP
+   ========================================================================= */
+const camCfg={1:{y:9.5,z:12},2:{y:8.4,z:10.8},3:{y:7.0,z:9.6}};
+const camGoal=new THREE.Vector3(0,9.5,12);
+const lookGoal=new THREE.Vector3(0,1,0);
+const lookCur=new THREE.Vector3(0,1,0);
+const raycaster=new THREE.Raycaster();
+const floorPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
+const ndc=new THREE.Vector2();
+const hitPoint=new THREE.Vector3();
+const projV=new THREE.Vector3();
+const impBarEl=$('impbar'), impBarFill=impBarEl.querySelector('i');
+const enemyBars=[];
+{
+  const hud=$('world-hud');
+  for(let i=0;i<8;i++){
+    const d=document.createElement('div');
+    d.className='hbar';d.style.display='none';
+    d.innerHTML='<i></i>';
+    hud.appendChild(d);
+    enemyBars.push(d);
+  }
+}
+function projectToScreen(wx,wy,wz){
+  projV.set(wx,wy,wz).project(camera);
+  if(projV.z>1)return null;
+  return {x:(projV.x*0.5+0.5)*innerWidth,y:(-projV.y*0.5+0.5)*innerHeight};
+}
+function clampLabelX(el,x){
+  const w=el.offsetWidth||80;
+  el.style.left=Math.max(w/2+6,Math.min(x,innerWidth-w/2-6))+'px';
+}
+function updateMouseRay(){
+  if(!mouseDirty)return;
+  mouseDirty=false;
+  ndc.x=(input.mouse.sx/innerWidth)*2-1;
+  ndc.y=-(input.mouse.sy/innerHeight)*2+1;
+  raycaster.setFromCamera(ndc,camera);
+  const hit=raycaster.ray.intersectPlane(floorPlane,hitPoint);
+  if(hit){
+    input.mouse.x=clamp(X2L(hitPoint.x),0,VW);
+    input.mouse.y=clamp(Z2L(hitPoint.z),0,VH);
+  }
+}
+function sync3D(dt){
+  simTime+=dt;
+
+  // aim line + marker rings
+  const hx=L2X(player.x), hz=L2Z(player.y);
+  ring.position.x=hx;ring.position.z=hz;
+  ring2.position.x=hx;ring2.position.z=hz;
+  ring2.scale.setScalar(1+Math.sin(simTime*3)*0.08);
+  const showAim=state===GS.PLAYING&&!player.dead;
+  aimLine.visible=showAim;
+  ring.visible=ring2.visible=!player.dead;
+  if(showAim){
+    const mx=L2X(input.mouse.x),mz=L2Z(input.mouse.y);
+    const p=aimLine.geometry.attributes.position;
+    p.setXYZ(0,hx,0.5,hz);p.setXYZ(1,mx,0.5,mz);
+    p.needsUpdate=true;
+    aimLine.computeLineDistances();
+  }
+
+  // projectiles
+  syncProjMeshes();
+
+  // player orbit shards + impostor shard halo
+  playerOrbit.visible=showAim;
+  if(showAim){
+    playerOrbit.position.set(hx,0.2,hz);
+    playerOrbit.rotation.y+=dt*2.6;
+    playerOrbit.children.forEach(c=>{
+      const a=c.userData.k/3*Math.PI*2;
+      c.position.set(Math.cos(a)*0.52,Math.sin(simTime*3+c.userData.k)*0.07,Math.sin(a)*0.52);
+      c.rotation.x+=dt*2.4;c.rotation.y+=dt*3.1;
+    });
+  }
+  impShards.visible=impostor.active&&!impostor.dead&&!impostor.peel;
+  if(impShards.visible){
+    impShards.position.set(L2X(impostor.x),1.35,L2Z(impostor.y));
+    impShards.rotation.y+=dt*1.9;
+    const shR=0.75+impostor.fragmentation*0.6;
+    impShards.children.forEach(s=>{
+      const a=s.userData.k/5*Math.PI*2;
+      s.position.set(Math.cos(a)*shR,Math.sin(simTime*4+s.userData.ph)*0.28,Math.sin(a)*shR);
+      s.rotation.x+=dt*3;s.rotation.y+=dt*2.2;
+    });
+  }
+
+  // impostor
+  if(impostor.sprite3d){
+    if(impostor.active&&!impostor.dead){
+      const ix=L2X(impostor.x),iz=L2Z(impostor.y);
+      const topY=0.15+impostor.sprite3d.scale.y;
+      impostor.sprite3d.position.set(ix,0.15,iz);   // grounded: stands on the floor
+      impostor.spriteGlow.position.set(ix,1.4,iz);
+      impostor.spriteGlow.material.opacity=0.35+0.18*Math.sin(simTime*4)+impostor.fragmentation*0.15;
+      impostor.spriteGlow.visible=true;
+      impostorLight.position.set(ix,1.6,iz);
+      impostorLight.intensity=0.9+0.3*Math.sin(simTime*3);
+      // impostor hp bar projection
+      const sp=projectToScreen(ix,topY+0.4,iz);
+      if(sp){impBarEl.style.display='block';clampLabelX(impBarEl,sp.x);impBarEl.style.top=sp.y+'px';
+        impBarEl.classList.toggle('enraged',!!impostor._rage);
+        impBarFill.style.width=Math.max(0,impostor.hp/impostor.maxHp*100)+'%';}
+      else impBarEl.style.display='none';
+      // prediction label projection
+      if(predLabelT>0){
+        predLabelT-=dt;
+        const pp=projectToScreen(ix,topY+0.95,iz);
+        const el=$('predlabel');
+        if(pp){clampLabelX(el,pp.x);el.style.top=pp.y+'px';el.style.opacity='1';}
+        else el.style.opacity='0';
+        if(predLabelT<=0)hidePredictionLabel();
+      }
+      // player sprite "distortion" near impostor (position jitter)
+      if(playerSprite3d){
+        const dd=dist2(player.x,player.y,impostor.x,impostor.y);
+        const k=clamp(1-dd/450,0,1);
+        playerSprite3d.position.x=rand(-0.02,0.02)*k*8;
+        playerSprite3d.position.y=playerSprite3d._baseY+rand(-0.02,0.02)*k*8;
+      }
+    }else{
+      impostor.sprite3d.visible=false;
+      impostor.spriteGlow.visible=false;
+      impostorLight.intensity=0;
+      impBarEl.style.display='none';
+    }
+  }
+
+  // enemy hp bars
+  for(let i=0;i<enemyBars.length;i++){
+    const bar=enemyBars[i], e=enemies[i];
+    if(e&&e.alive&&(state===GS.PLAYING||state===GS.ROUND_INTRO)){
+      const ep=projectToScreen(L2X(e.x),1.15,L2Z(e.y));
+      if(ep){
+        bar.style.display='block';
+        bar.style.left=ep.x+'px';bar.style.top=ep.y+'px';
+        bar.className='hbar '+(e.type==='hunter'?'hunter':'');
+        bar.querySelector('i').style.width=Math.max(0,e.hp/e.maxHp*100)+'%';
+      }else bar.style.display='none';
+    }else bar.style.display='none';
+  }
+
+  // walls + floaters
+  updateWalls(dt);
+  updateFloaters(dt);
+  updateBattlefield(dt);
+
+  // glitch frames
+  if(glitchFrames>0){
+    glitchFrames--;
+    camera.position.x+=rand(-0.3,0.3);
+    if(glitchFrames<=0)bloomSpike=0.4;
+  }
+  if(bloomSpike>0)bloomSpike=Math.max(0,bloomSpike-dt*1.6);
+  bloomPass.strength=0.55+bloomSpike;
+
+  // camera: round-based framing + follow + parallax + shake + recoil
+  const base=camCfg[round]||camCfg[1];
+  camGoal.set(hx*0.22+L2X(input.mouse.x)*0.06, base.y+Math.sin(simTime*0.28)*0.18, base.z+recoil*0.5);
+  camera.position.lerp(camGoal,dt*3.2);
+  lookGoal.set(hx*0.3+L2X(input.mouse.x)*0.12,1.0,-1.2+L2Z(input.mouse.y)*0.06);
+  lookCur.lerp(lookGoal,dt*3.5);
+  camera.lookAt(lookCur);
+  recoil=Math.max(0,recoil-dt*4);
+  if(shakeMag>0.1){
+    camera.position.x+=rand(-0.05,0.05)*shakeMag*0.14;
+    camera.position.y+=rand(-0.04,0.04)*shakeMag*0.14;
+    shakeMag*=Math.pow(0.001,dt);
+  }else shakeMag=0;
+}
+
+/* main loop */
+let lastT=0, fragFrameSkip=0;
+function loop(t){
+  requestAnimationFrame(loop);
+  const dt=Math.min((t-lastT)||16.7,34)/1000;
+  lastT=t;
+  if(dt<=0)return;
+
+  updateParticles(dt);
+
+  if(camOn&&visionReady){
+    segTimer-=dt;faceTimer-=dt;
+    if(segTimer<=0){segTimer=1/15;runSegmentation();}
+    if(faceTimer<=0){faceTimer=0.1;runFace();}
+  }
+  ensurePlayerSprite();
+  updateMouseRay();
+
+  if(state===GS.PLAYING){
+    const wdt=dt*timeScale;
+    updatePlayer(dt);
+    updateImpostor(dt);
+    if(impostor.peel){updatePeel(dt);}
+    else{
+      updateEnemies(wdt);
+      updateProjPool(pProj,wdt,0xd8ecf5);
+      updateProjPool(eProj,wdt,0x8a8ad8);
+      updateProjPool(iProj,wdt,0xff2a4c);
+      checkCollisions();
+      const plan=roundPlans[round];
+      if(enemies.length<plan.aliveCap){
+        spawnTimer-=dt;
+        const interval=plan.spawnInterval*(aiConfig?(2-(aiConfig.spawnRate||0.7)):1)*spawnTensionMult;
+        if(spawnTimer<=0){
+          spawnTimer=Math.max(0.7,interval);
+          spawnEnemy(Math.random()<plan.mix.drone?'drone':'hunter');
+        }
+      }
+      checkRoundEnd(dt);
+    }
+    updatePanel(dt);
+    updateStress(dt);
+    fragFrameSkip++;
+    if(fragFrameSkip>3){fragFrameSkip=0;updateImpostorFrag();}
+  }else if(state!==GS.LOADING){
+    updatePanel(dt*0.2);
+    if(impostor.peel)updatePeel(dt);
+    updateImpostorFrag();
+    // vitals settle between rounds
+    stressState.v+=(10-stressState.v)*dt*0.5;
+    stressState.expr=classifyExpression();
+    $('stress-vign').style.opacity=clamp((stressState.v-52)/48,0,1)*0.85;
+  }
+
+  sync3D(dt);
+  try{composer.render();}catch(e){renderer.render(scene,camera);}
+}
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+  composer.setSize(innerWidth,innerHeight);
+});
+</script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — 21-boot.js
+   boot: init + scan + round 1
+   Classic script (no ES modules): loaded in HTML order, shares the
+   global scope with all other js/* modules. Keep load order stable.
+   ========================================================================= */
+/* ---------------- boot ---------------- */
+function setApiNote(){
+  const el=$('api-note');
+  const order=providerOrder().filter(n=>PROVIDERS[n]&&PROVIDERS[n].configured());
+  if(!order.length){
+    el.textContent="NO API KEY SET — IMPOSTOR RUNNING ON LOCAL FALLBACK MIND";
+    return;
+  }
+  const chain=order.map(n=>PROVIDERS[n].name+" ("+PROVIDERS[n].model()+")").join(" → ");
+  el.textContent="MIND: "+chain+" → LOCAL FALLBACK"+(activeAIProvider?("  ·  ACTIVE: "+activeAIProvider):"");
+}
+(async function boot(){
+  setApiNote();
+  drawFloor();
+  buildPillars();
+  updateHpBar();
+  if(CONFIG.DEBUG_MODE){
+    buildPlaceholderAvatar();
+    try{$('cb-state').textContent='SYNTH';showCamBox();}catch(e){}
+  }
+  await initVision();
+  if(!camOn&&!CONFIG.DEBUG_MODE&&offCanvas.width===0)buildPlaceholderAvatar();
+  runScanSequence(()=>{beginRound(1);});
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

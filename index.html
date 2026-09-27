@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>THE IMPOSTOR — 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="game-container"></div>
+<video id="webcam-video" autoplay muted playsinline></video>
+
+<div id="world-hud">
+  <div id="impbar"><i></i></div>
+  <div id="predlabel"><div class="a" id="pred-a"></div><div class="b" id="pred-b"></div></div>
+</div>
+<div id="vigCSS"></div>
+<div id="scanCSS"></div>
+<div id="xhair"></div>
+
+<div id="ui-overlay" style="position:fixed;inset:0;z-index:100;pointer-events:none;">
+  <div id="api-note"></div>
+  <div id="profile-panel" style="display:none;">
+    <div class="panel-header">BEHAVIORAL PROFILE</div>
+    <div class="panel-line"><span class="label">Dodge direction</span><span class="value" id="dodge-display">—</span></div>
+    <div class="panel-line"><span class="label">Position</span><span class="value" id="position-display">—</span></div>
+    <div class="panel-line"><span class="label">Aggression</span><span class="value" id="aggression-display">—</span></div>
+    <div class="panel-line"><span class="label">Reaction time</span><span class="value" id="reaction-display">—</span></div>
+    <div class="panel-line"><span class="label">Dodge distance</span><span class="value" id="dodgedist-display">—</span></div>
+    <div class="panel-line"><span class="label">Movement</span><span class="value" id="movement-display">—</span></div>
+    <div class="panel-line"><span class="label">Fire style</span><span class="value" id="firestyle-display">—</span></div>
+    <div class="panel-line"><span class="label">Aim</span><span class="value" id="aim-display">—</span></div>
+    <div class="panel-line"><span class="label">Subject stress</span><span class="value" id="stress-px">—</span></div>
+    <div class="panel-line"><span class="label">Pattern confidence</span></div>
+    <div class="confidence-bar"><div class="confidence-fill" id="confidence-fill"></div></div>
+    <div id="pattern-log"></div>
+  </div>
+  <div id="round-hud"><span class="big" id="round-label"></span><br><span id="round-timer"></span></div>
+  <div id="sys-note"></div>
+  <div id="hp-wrap"><div id="hp-fill"></div></div>
+  <div id="announce"><div class="r" id="ann-r"></div><div class="s" id="ann-s"></div></div>
+  <div id="taunt-display"><div id="taunt-source">THE IMPOSTOR</div><div id="taunt-text"></div></div>
+  <div id="scan-overlay">
+    <div id="scan-gate"></div>
+    <div id="scan-text">INITIALIZING...<div id="scan-sub"></div>
+      <div class="scan-bars"><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+  </div>
+  <div id="game-over">
+    <div id="go-result"></div>
+    <div id="go-final-message"></div>
+    <div id="go-profile-summary"></div>
+    <button id="go-restart" style="pointer-events:auto;">PLAY AGAIN</button>
+  </div>
+  <div id="fatal"></div>
+  <div id="hit-flash"></div>
+</div>
+<div id="stress-vign"></div>
+<div id="cam-box" style="display:none;">
+  <div class="cb-hdr">◉ SUBJECT FEED <span id="cb-state">SYNC</span></div>
+  <div class="cb-vid" id="cb-vid">
+    <div class="cb-nosignal" id="cb-nosignal">NO OPTICAL SIGNAL<br>SYNTHETIC SUBJECT</div>
+    <div class="cb-aine"></div>
+  </div>
+  <div class="cb-row"><span id="expr-emoji">😐</span><span id="expr-text">CALIBRATING</span></div>
+  <div class="cb-stress-row"><span>STRESS</span><div class="cb-bar"><i id="stress-fill"></i></div><span id="stress-pct">--%</span></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js"></script>
+
+<!-- game modules: classic scripts, strict dependency order. No build step — works over http:// and file://. -->
+<script src="js/00-config.js"></script>
+<script src="js/01-core.js"></script>
+<script src="js/02-audio.js"></script>
+<script src="js/03-state-input.js"></script>
+<script src="js/04-tracker.js"></script>
+<script src="js/05-world.js"></script>
+<script src="js/06-battlefield.js"></script>
+<script src="js/07-player.js"></script>
+<script src="js/08-particles.js"></script>
+<script src="js/09-projectiles.js"></script>
+<script src="js/10-enemies.js"></script>
+<script src="js/11-impostor.js"></script>
+<script src="js/12-fx-player.js"></script>
+<script src="js/13-collisions.js"></script>
+<script src="js/14-roundflow.js"></script>
+<script src="js/15-ai.js"></script>
+<script src="js/16-ui.js"></script>
+<script src="js/17-vision.js"></script>
+<script src="js/18-stress.js"></script>
+<script src="js/19-scan.js"></script>
+<script src="js/20-sync3d.js"></script>
+<script src="js/21-boot.js"></script>
+</body>
+</html>

@@ -1,0 +1,1883 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>THE IMPOSTOR</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#050508; --grid:#0d1117; --player-tint:#e8f4f8;
+    --impostor:#1a0005; --impostor-glow:#ff1a3c;
+    --enemy:#1c1c2e; --enemy-accent:#4a4a7a;
+    --ui-green:#00ff88; --ui-yellow:#ffe44d; --ui-red:#ff1a3c;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);}
+  body{font-family:'Space Grotesk',sans-serif;color:var(--player-tint);}
+  #game-container{position:fixed;inset:0;z-index:1;}
+  #game-container canvas{display:block;cursor:none;}
+  #webcam-video{display:none;}
+
+  /* ---------- behavioral profile panel ---------- */
+  #profile-panel{
+    position:absolute;top:20px;right:20px;
+    background:rgba(0,0,0,0.85);
+    border:1px solid rgba(0,255,136,0.3);
+    padding:12px 16px;
+    font-family:'Space Mono',monospace;font-size:11px;color:var(--ui-green);
+    min-width:230px;z-index:100;user-select:none;pointer-events:none;
+  }
+  .panel-header{font-size:10px;letter-spacing:0.15em;color:rgba(0,255,136,0.5);
+    margin-bottom:10px;font-family:'Space Grotesk',sans-serif;font-weight:600;}
+  .panel-line{margin:5px 0;overflow:hidden;}
+  .label{color:rgba(0,255,136,0.5);}
+  .value{color:var(--ui-green);float:right;}
+  .value.hot{color:var(--ui-yellow);}
+  .confidence-bar{width:100%;height:3px;background:rgba(0,255,136,0.15);margin-top:6px;}
+  .confidence-fill{height:100%;background:var(--ui-green);transition:width 0.5s ease;width:0%;}
+  #pattern-log{margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,255,136,0.15);
+    font-size:10px;color:var(--ui-yellow);min-height:14px;letter-spacing:0.05em;}
+
+  /* ---------- hud ---------- */
+  #round-hud{
+    position:absolute;top:20px;left:50%;transform:translateX(-50%);
+    font-family:'Space Mono',monospace;font-size:12px;letter-spacing:0.2em;
+    color:rgba(232,244,248,0.55);z-index:100;user-select:none;pointer-events:none;
+    text-align:center;
+  }
+  #round-hud .big{color:var(--player-tint);font-weight:700;}
+  #sys-note{
+    position:absolute;bottom:16px;left:20px;
+    font-family:'Space Mono',monospace;font-size:10px;letter-spacing:0.15em;
+    color:rgba(0,255,136,0.55);z-index:100;user-select:none;pointer-events:none;
+  }
+  #hp-wrap{
+    position:absolute;bottom:0;left:0;width:100%;height:4px;
+    background:rgba(255,255,255,0.06);z-index:100;pointer-events:none;
+  }
+  #hp-fill{height:100%;width:100%;background:var(--ui-green);transition:width .15s ease, background .3s ease;}
+  #hit-flash{position:fixed;inset:0;background:var(--ui-red);opacity:0;pointer-events:none;
+    z-index:150;transition:opacity .25s ease;}
+
+  /* ---------- center overlays ---------- */
+  #announce{
+    position:absolute;top:38%;left:50%;transform:translate(-50%,-50%);
+    text-align:center;z-index:200;pointer-events:none;opacity:0;transition:opacity .3s ease;
+  }
+  #announce .r{font-size:44px;font-weight:600;letter-spacing:0.18em;color:var(--player-tint);}
+  #announce .s{font-family:'Space Mono',monospace;font-size:12px;letter-spacing:0.3em;color:var(--ui-red);margin-top:10px;}
+
+  #taunt-display{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    text-align:center;max-width:560px;z-index:200;display:none;pointer-events:none;
+    background:rgba(0,0,0,0.55);padding:28px 36px;border:1px solid rgba(255,26,60,0.25);
+  }
+  #taunt-source{font-size:11px;letter-spacing:0.25em;color:var(--ui-red);margin-bottom:12px;font-family:'Space Grotesk',sans-serif;}
+  #taunt-text{font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:300;color:var(--player-tint);line-height:1.5;}
+  #taunt-display.pulse #taunt-text{animation:pulse 0.9s infinite;}
+  @keyframes pulse{0%,100%{opacity:0.25;}50%{opacity:1;}}
+
+  /* ---------- scanning intro ---------- */
+  #scan-overlay{position:fixed;inset:0;z-index:300;pointer-events:none;}
+  #scan-text{
+    position:absolute;top:24%;left:50%;transform:translateX(-50%);
+    font-family:'Space Mono',monospace;font-size:15px;letter-spacing:0.3em;color:var(--ui-green);
+    text-shadow:0 0 12px rgba(0,255,136,0.5);text-align:center;
+  }
+  #scan-sub{font-size:10px;color:rgba(0,255,136,0.5);margin-top:10px;letter-spacing:0.2em;}
+  #scan-line{
+    position:absolute;left:0;width:100%;height:2px;top:-4px;
+    background:linear-gradient(90deg,transparent,var(--ui-green),transparent);
+    box-shadow:0 0 18px rgba(0,255,136,0.9);opacity:0;
+  }
+  #scan-line.go{opacity:1;animation:sweep 1.1s linear;}
+  @keyframes sweep{from{top:0;}to{top:100%;}}
+  .scan-bars{display:flex;gap:6px;justify-content:center;margin-top:14px;}
+  .scan-bars i{width:26px;height:3px;background:rgba(0,255,136,0.15);}
+  .scan-bars i.on{background:var(--ui-green);}
+
+  /* ---------- game over ---------- */
+  #game-over{
+    position:fixed;inset:0;z-index:400;display:none;
+    background:rgba(5,5,8,0.92);text-align:center;padding-top:12vh;
+  }
+  #go-result{font-size:52px;font-weight:600;letter-spacing:0.15em;color:var(--ui-red);}
+  #go-result.win{color:var(--ui-green);}
+  #go-final-message{max-width:520px;margin:26px auto 0;font-size:18px;font-weight:300;line-height:1.6;color:var(--player-tint);}
+  #go-profile-summary{
+    max-width:460px;margin:34px auto 0;font-family:'Space Mono',monospace;font-size:12px;
+    line-height:2;color:var(--ui-green);text-align:left;
+    border:1px solid rgba(0,255,136,0.25);padding:18px 24px;background:rgba(0,0,0,0.6);
+  }
+  #go-profile-summary .hdr{color:rgba(0,255,136,0.5);letter-spacing:0.2em;margin-bottom:6px;}
+  #go-profile-summary .tail{color:var(--ui-yellow);margin-top:8px;letter-spacing:0.15em;}
+  #go-restart{
+    margin-top:36px;background:transparent;border:1px solid var(--ui-green);color:var(--ui-green);
+    font-family:'Space Mono',monospace;font-size:13px;letter-spacing:0.25em;
+    padding:12px 34px;cursor:pointer;transition:all .2s;
+  }
+  #go-restart:hover{background:var(--ui-green);color:#000;}
+
+  #fatal{
+    position:fixed;inset:0;z-index:500;display:none;background:var(--bg);
+    color:var(--ui-red);font-family:'Space Mono',monospace;font-size:13px;
+    padding:40px;line-height:2;
+  }
+  #api-note{
+    position:absolute;top:20px;left:20px;font-family:'Space Mono',monospace;font-size:10px;
+    color:rgba(255,228,77,0.4);z-index:100;letter-spacing:0.1em;user-select:none;pointer-events:none;
+    max-width:220px;line-height:1.7;
+  }
+</style>
+</head>
+<body>
+<div id="game-container"></div>
+<video id="webcam-video" autoplay muted playsinline></video>
+
+<div id="ui-overlay" style="position:fixed;inset:0;z-index:100;pointer-events:none;">
+  <div id="api-note"></div>
+  <div id="profile-panel" style="display:none;">
+    <div class="panel-header">BEHAVIORAL PROFILE</div>
+    <div class="panel-line"><span class="label">Dodge direction</span><span class="value" id="dodge-display">—</span></div>
+    <div class="panel-line"><span class="label">Position</span><span class="value" id="position-display">—</span></div>
+    <div class="panel-line"><span class="label">Aggression</span><span class="value" id="aggression-display">—</span></div>
+    <div class="panel-line"><span class="label">Reaction time</span><span class="value" id="reaction-display">—</span></div>
+    <div class="panel-line"><span class="label">Pattern confidence</span></div>
+    <div class="confidence-bar"><div class="confidence-fill" id="confidence-fill"></div></div>
+    <div id="pattern-log"></div>
+  </div>
+  <div id="round-hud"><span class="big" id="round-label"></span><br><span id="round-timer"></span></div>
+  <div id="sys-note"></div>
+  <div id="hp-wrap"><div id="hp-fill"></div></div>
+
+  <div id="announce"><div class="r" id="ann-r"></div><div class="s" id="ann-s"></div></div>
+
+  <div id="taunt-display">
+    <div id="taunt-source">THE IMPOSTOR</div>
+    <div id="taunt-text"></div>
+  </div>
+
+  <div id="scan-overlay">
+    <div id="scan-line"></div>
+    <div id="scan-text">INITIALIZING...<div id="scan-sub"></div>
+      <div class="scan-bars"><i></i><i></i><i></i><i></i><i></i></div>
+    </div>
+  </div>
+
+  <div id="game-over">
+    <div id="go-result"></div>
+    <div id="go-final-message"></div>
+    <div id="go-profile-summary"></div>
+    <button id="go-restart" style="pointer-events:auto;">PLAY AGAIN</button>
+  </div>
+  <div id="fatal"></div>
+  <div id="hit-flash"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/pixi.js@7/dist/pixi.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.js"></script>
+<script>
+/* =========================================================================
+   THE IMPOSTOR — a game that learns how you play, then uses it against you.
+   Single-file build. PixiJS v7 + MediaPipe tasks-vision + Claude API.
+   ========================================================================= */
+
+const CONFIG = {
+  /* ── Which brain powers the Impostor ─────────────────────────────────────
+     "auto" tries configured providers in order:
+        OMNI AI → OpenRouter → Anthropic → local fallback mind
+     Set to "omniai" | "openrouter" | "anthropic" | "local" to force one. */
+  PROVIDER: "auto",
+
+  /* OMNI AI (ideamart.io) — hackathon free tier.
+     Authorization: raw key, no Bearer prefix (per ideamart docs). */
+  OMNIAI_API_KEY: "YOUR_API_KEY_HERE",
+  OMNIAI_MODEL: "gemini-2.5-flash-lite",   // claude-sonnet-4 | gemini-2.5-pro | gemini-2.5-flash-lite | gpt-4o-mini
+
+  /* OpenRouter — FREE tier: openrouter.ai → Keys (no card needed).
+     "openrouter/free" auto-picks a free model; or pin a :free variant, e.g.
+     "meta-llama/llama-3.3-70b-instruct:free" | "deepseek/deepseek-chat-v3-0324:free" */
+  OPENROUTER_API_KEY: "YOUR_API_KEY_HERE",
+  OPENROUTER_MODEL: "openrouter/free",
+
+  /* Anthropic direct. */
+  ANTHROPIC_API_KEY: "YOUR_API_KEY_HERE",
+  ANTHROPIC_MODEL: "claude-sonnet-4-6",
+
+  DEBUG_MODE: (typeof location !== "undefined" && /[?&]debug/.test(location.search)) || false
+};
+
+/* ---------------- utils ---------------- */
+const $=(id)=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rand=(a,b)=>a+Math.random()*(b-a);
+const pick=(a)=>a[(Math.random()*a.length)|0];
+const now=()=>performance.now();
+const easeInOut=(t)=>t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+const dist2=(ax,ay,bx,by)=>{const dx=ax-bx,dy=ay-by;return Math.sqrt(dx*dx+dy*dy);};
+function circleCollide(a,b){return dist2(a.x,a.y,b.x,b.y)<(a.radius+b.radius);}
+const DIRV={left:{x:-1,y:0},right:{x:1,y:0},up:{x:0,y:-1},down:{x:0,y:1}};
+
+/* ---------------- audio (procedural, WebAudio) ---------------- */
+let audioCtx=null, droneOsc=null;
+function initAudio(){
+  if(audioCtx) return;
+  try{
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    droneOsc=audioCtx.createOscillator();
+    const g=audioCtx.createGain(); g.gain.value=0.02;
+    droneOsc.type='sine'; droneOsc.frequency.value=55;
+    droneOsc.connect(g); g.connect(audioCtx.destination); droneOsc.start();
+    droneOsc._gain=g;
+  }catch(e){}
+}
+function playTone(freq,type,duration,gain){
+  if(!audioCtx)return; gain=gain===undefined?0.25:gain;
+  try{
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.connect(g);g.connect(audioCtx.destination);
+    o.type=type;o.frequency.value=freq;
+    g.gain.setValueAtTime(gain,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+duration);
+    o.start();o.stop(audioCtx.currentTime+duration);
+  }catch(e){}
+}
+function playNoise(dur,gain){
+  if(!audioCtx)return;
+  try{
+    const n=(audioCtx.sampleRate*dur)|0;
+    const buf=audioCtx.createBuffer(1,n,audioCtx.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n);
+    const s=audioCtx.createBufferSource();s.buffer=buf;
+    const g=audioCtx.createGain();g.gain.value=gain;
+    s.connect(g);g.connect(audioCtx.destination);s.start();
+  }catch(e){}
+}
+function playSweep(f1,f2,dur,type,gain){
+  if(!audioCtx)return;
+  try{
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type=type||'sawtooth';o.frequency.setValueAtTime(f1,audioCtx.currentTime);
+    o.frequency.exponentialRampToValueAtTime(f2,audioCtx.currentTime+dur);
+    g.gain.setValueAtTime(gain||0.2,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+    o.connect(g);g.connect(audioCtx.destination);
+    o.start();o.stop(audioCtx.currentTime+dur);
+  }catch(e){}
+}
+const sfx={
+  shoot:()=>playTone(800,'square',0.05,0.10),
+  eHit:()=>playNoise(0.08,0.22),
+  pHit:()=>{playTone(80,'sine',0.15,0.4);playNoise(0.1,0.18);},
+  impostorAppear:()=>playSweep(400,80,1.5,'sawtooth',0.16),
+  confirm:()=>{playTone(440,'sine',0.1,0.2);setTimeout(()=>playTone(880,'sine',0.1,0.2),110);},
+  round:()=>playSweep(100,300,2,'sine',0.12),
+  ominous:()=>playTone(46,'sine',1.4,0.22),
+  die:()=>{playSweep(300,40,0.9,'sawtooth',0.2);playNoise(0.4,0.25);}
+};
+
+/* ---------------- game state ---------------- */
+const GS={LOADING:"loading",SCANNING:"scanning",ROUND_INTRO:"round_intro",PLAYING:"playing",
+  ROUND_END:"round_end",AI_THINKING:"ai_thinking",TAUNT:"taunt",GAME_OVER:"game_over",WIN:"win"};
+let state=GS.LOADING;
+let round=1, timeScale=1, shakeMag=0, glitchFrames=0, simTime=0;
+let roundTimeLeft=0, spawnTimer=0, spawnTensionMult=1;
+let aiConfig=null, lastAITaunt="";
+
+/* ---------------- input ---------------- */
+const input={keys:{},mouse:{x:0,y:0,leftDown:false}};
+document.addEventListener('keydown',e=>{initAudio();if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+  input.keys[e.code]=true;
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();});
+document.addEventListener('keyup',e=>{input.keys[e.code]=false;});
+document.addEventListener('mousemove',e=>{
+  const r=app.view.getBoundingClientRect();
+  input.mouse.x=(e.clientX-r.left)*(app.screen.width/r.width);
+  input.mouse.y=(e.clientY-r.top)*(app.screen.height/r.height);});
+document.addEventListener('mousedown',e=>{initAudio();if(audioCtx&&audioCtx.state==='suspended')audioCtx.resume();
+  if(e.button===0)input.mouse.leftDown=true;});
+document.addEventListener('mouseup',e=>{if(e.button===0)input.mouse.leftDown=false;});
+
+/* ---------------- behavior tracker ---------------- */
+const tracker={
+  dodgeDirections:{left:0,right:0,up:0,down:0},
+  positionSamples:[],shotsFired:0,distanceTraveled:0,
+  reactionTimes:[],panicMoves:[],
+  profile:{dominantDodge:null,dodgeConsistency:0,positionPreference:null,
+    aggressionRatio:0,avgReactionTime:0,panicBehavior:null,patternConfidence:0}
+};
+let pendingShotTime=0,lastInputKey="",posSampleTimer=0;
+let dodgeWatch={active:false,until:0,dx:0,dy:0};
+function triggerDodgeWatch(){
+  if(dodgeWatch.active)return;
+  dodgeWatch={active:true,until:now()+500,dx:0,dy:0};
+}
+function noteEnemyShot(){ if(!pendingShotTime)pendingShotTime=now(); }
+function onInputChange(key){
+  if(!key||key===lastInputKey)return;
+  lastInputKey=key;
+  if(pendingShotTime){
+    const rt=now()-pendingShotTime;
+    if(rt>80&&rt<3000)tracker.reactionTimes.push(rt);
+    pendingShotTime=0;
+  }
+  if(player.hp<30){
+    const d=keyDir(key); if(d&&tracker.panicMoves.length<24)tracker.panicMoves.push(d);
+  }
+}
+function keyDir(key){
+  if(key==='KeyA'||key==='ArrowLeft')return'left';
+  if(key==='KeyD'||key==='ArrowRight')return'right';
+  if(key==='KeyW'||key==='ArrowUp')return'up';
+  if(key==='KeyS'||key==='ArrowDown')return'down';
+  return null;
+}
+function classify(dx,dy){
+  if(Math.abs(dx)>Math.abs(dy))return dx>0?'right':'left';
+  return dy>0?'down':'up';
+}
+function liveDominant(){
+  const d=tracker.dodgeDirections;
+  const total=d.left+d.right+d.up+d.down;
+  if(total<2)return null;
+  return Object.keys(d).reduce((a,b)=>d[a]>=d[b]?a:b);
+}
+function computeProfile(){
+  const p=tracker.profile,d=tracker.dodgeDirections;
+  const total=d.left+d.right+d.up+d.down;
+  if(total>0){
+    const dom=Object.keys(d).reduce((a,b)=>d[a]>=d[b]?a:b);
+    p.dominantDodge=dom;p.dodgeConsistency=d[dom]/total;
+  }
+  if(tracker.positionSamples.length>0){
+    const ax=tracker.positionSamples.reduce((a,b)=>a+b.x,0)/tracker.positionSamples.length;
+    const ay=tracker.positionSamples.reduce((a,b)=>a+b.y,0)/tracker.positionSamples.length;
+    const dc=Math.sqrt(Math.pow(ax-0.5,2)+Math.pow(ay-0.5,2));
+    p.positionPreference=dc<0.16?"center":dc<0.3?"edge":"corner";
+  }
+  if(tracker.reactionTimes.length>0)
+    p.avgReactionTime=tracker.reactionTimes.reduce((a,b)=>a+b,0)/tracker.reactionTimes.length;
+  const sampleWeight=Math.min(total/10,1);
+  p.patternConfidence=(p.dodgeConsistency*0.6+sampleWeight*0.4);
+  p.aggressionRatio=Math.min(tracker.shotsFired/30,1);
+  if(tracker.panicMoves.length>0){
+    const counts={};tracker.panicMoves.forEach(m=>counts[m]=(counts[m]||0)+1);
+    p.panicBehavior=Object.keys(counts).reduce((a,b)=>counts[a]>=counts[b]?a:b);
+  }
+}
+
+/* ---------------- pixi setup ---------------- */
+if(typeof PIXI==='undefined'){
+  $('fatal').style.display='block';
+  $('fatal').textContent='FAILED TO LOAD PIXIJS FROM CDN. CHECK INTERNET CONNECTION.';
+  throw new Error('PIXI missing');
+}
+const app=new PIXI.Application({
+  width:innerWidth,height:innerHeight,backgroundColor:0x050508,
+  antialias:true,autoDensity:true,resolution:window.devicePixelRatio||1
+});
+$('game-container').appendChild(app.view);
+
+let arena={x:40,y:40,w:innerWidth-80,h:innerHeight-80};
+
+const rootC=new PIXI.Container();     // shaken as one
+const gridG=new PIXI.Graphics();
+const shapesG=new PIXI.Graphics();
+const worldC=new PIXI.Container();    // entities
+const fxG=new PIXI.Graphics();        // aim line, marker
+const overlayC=new PIXI.Container();
+rootC.addChild(gridG,shapesG,worldC,fxG);
+app.stage.addChild(rootC,overlayC);
+
+/* textures */
+function makeCircleTexture(color,radius){
+  const g=new PIXI.Graphics();
+  g.beginFill(color);g.drawCircle(radius,radius,radius);g.endFill();
+  const t=app.renderer.generateTexture(g,{region:new PIXI.Rectangle(0,0,radius*2,radius*2)});
+  g.destroy();return t;
+}
+function makeGlowTexture(){
+  const c=document.createElement('canvas');c.width=c.height=128;
+  const x=c.getContext('2d');
+  const gr=x.createRadialGradient(64,64,2,64,64,64);
+  gr.addColorStop(0,'rgba(255,255,255,0.85)');
+  gr.addColorStop(0.45,'rgba(255,255,255,0.22)');
+  gr.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=gr;x.fillRect(0,0,128,128);
+  return PIXI.Texture.from(c);
+}
+function makeNoiseTexture(){
+  const c=document.createElement('canvas');c.width=c.height=256;
+  const x=c.getContext('2d');
+  const img=x.createImageData(256,256);
+  for(let i=0;i<img.data.length;i+=4){
+    const v=(Math.random()*255)|0;
+    img.data[i]=v;img.data[i+1]=v;img.data[i+2]=v;img.data[i+3]=255;
+  }
+  x.putImageData(img,0,0);
+  const t=PIXI.Texture.from(c);
+  t.baseTexture.wrapMode=PIXI.WRAP_MODES.REPEAT;
+  return t;
+}
+const circleTex=makeCircleTexture(0xffffff,4);
+const bigCircleTex=makeCircleTexture(0xffffff,6);
+const glowTex=makeGlowTexture();
+const noiseTex=makeNoiseTexture();
+
+/* scanlines */
+const slC=document.createElement('canvas');slC.width=4;slC.height=4;
+{const x=slC.getContext('2d');x.fillStyle='rgba(0,255,136,1)';x.fillRect(0,0,4,1);}
+const scanTex=PIXI.Texture.from(slC);
+scanTex.baseTexture.wrapMode=PIXI.WRAP_MODES.REPEAT;
+const scanTS=new PIXI.TilingSprite(scanTex,innerWidth,innerHeight);
+scanTS.alpha=0.03;
+overlayC.addChild(scanTS);
+
+/* vignette */
+function makeVignette(){
+  const c=document.createElement('canvas');c.width=c.height=512;
+  const x=c.getContext('2d');
+  const g=x.createRadialGradient(256,256,225,256,256,400);
+  g.addColorStop(0,'rgba(0,0,0,0)');
+  g.addColorStop(0.55,'rgba(0,0,0,0)');
+  g.addColorStop(0.82,'rgba(0,0,0,0.5)');
+  g.addColorStop(1,'rgba(0,0,0,0.92)');
+  x.fillStyle=g;x.fillRect(0,0,512,512);
+  return PIXI.Texture.from(c);
+}
+const vigS=new PIXI.Sprite(makeVignette());
+overlayC.addChild(vigS);
+
+/* displacement on player */
+const dispSprite=new PIXI.Sprite(noiseTex);
+dispSprite.renderable=false;
+app.stage.addChild(dispSprite);
+const dispFilter=new PIXI.filters.DisplacementFilter(dispSprite);
+dispFilter.scale.x=0;dispFilter.scale.y=0;
+
+/* player webcam sprite (texture assigned later) */
+let playerSprite=null,playerTexDirty=false;
+
+/* ---------------- background ---------------- */
+function drawGrid(){
+  gridG.clear();
+  const op=round>=3?1.0:round===2?0.7:0.5;
+  gridG.lineStyle(1,0x16213a,op);
+  const step=60;
+  for(let x=arena.x;x<=arena.x+arena.w+1;x+=step){gridG.moveTo(x,arena.y);gridG.lineTo(x,arena.y+arena.h);}
+  for(let y=arena.y;y<=arena.y+arena.h+1;y+=step){gridG.moveTo(arena.x,y);gridG.lineTo(arena.x+arena.w,y);}
+  gridG.lineStyle(1,0x00ff88,0.2);
+  gridG.drawRect(arena.x,arena.y,arena.w,arena.h);
+}
+function drawShapes(){
+  shapesG.clear();
+  if(round<2)return;
+  const W=app.screen.width,H=app.screen.height;
+  const a=round>=3?0.22:0.12;
+  shapesG.lineStyle(1,0x4a4a7a,a);
+  const polys=[
+    [[0.12,0.2],[0.3,0.13],[0.36,0.3],[0.2,0.36],[0.1,0.3]],
+    [[0.75,0.12],[0.9,0.2],[0.84,0.36],[0.68,0.3]],
+    [[0.15,0.72],[0.3,0.66],[0.38,0.8],[0.24,0.9]],
+    [[0.7,0.7],[0.88,0.68],[0.92,0.85],[0.74,0.88]]
+  ];
+  polys.forEach((p,i)=>{
+    shapesG.moveTo(p[0][0]*W,p[0][1]*H);
+    const complete=round>=3;
+    const n=complete?p.length:p.length-1;
+    for(let k=1;k<n;k++)shapesG.lineTo(p[k][0]*W,p[k][1]*H);
+    if(complete)shapesG.lineTo(p[0][0]*W,p[0][1]*H);
+    if(round>=3){shapesG.lineStyle(1,0x4a4a7a,a*0.6);}
+  });
+}
+function layout(){
+  const W=innerWidth,H=innerHeight;
+  app.renderer.resize(W,H);
+  arena={x:40,y:40,w:W-80,h:H-80};
+  drawGrid();drawShapes();
+  scanTS.width=W;scanTS.height=H;
+  vigS.width=W;vigS.height=H;
+  vigS.alpha=round>=3?0.75:round===2?0.6:0.45;
+  if(playerSprite){positionPlayerSprite();}
+  player.x=clamp(player.x,arena.x+player.r,arena.x+arena.w-player.r);
+  player.y=clamp(player.y,arena.y+player.r,arena.y+arena.h-player.r);
+}
+window.addEventListener('resize',layout);
+
+/* ---------------- player ---------------- */
+const player={x:innerWidth/2,y:innerHeight*0.7,r:30,radius:30,
+  hp:100,maxHp:100,speed:220,shootCd:0,dead:false,invulnT:0,
+  vx:0,vy:0,dxFrame:0,dyFrame:0};
+
+function positionPlayerSprite(){
+  if(!playerSprite)return;
+  const H=app.screen.height;
+  const s=(H*0.30)/playerSprite._srcH;
+  playerSprite.scale.set(s);
+  playerSprite.x=app.screen.width/2;
+  playerSprite.y=H-6;
+  playerSprite.anchor.set(0.5,1);
+}
+
+/* ---------------- particles ---------------- */
+const particles=[];
+function spawnParticles(x,y,color,n,spd){
+  for(let i=0;i<n;i++){
+    let p=particles.find(q=>!q.active);
+    if(!p){
+      if(particles.length>160)return;
+      p={active:false,spr:new PIXI.Sprite(circleTex),vx:0,vy:0,life:0,maxLife:1};
+      p.spr.anchor.set(0.5);
+      worldC.addChild(p.spr);
+      particles.push(p);
+    }
+    p.active=true;p.life=p.maxLife=rand(0.25,0.7);
+    const a=Math.random()*Math.PI*2,s=rand(spd*0.3,spd);
+    p.vx=Math.cos(a)*s;p.vy=Math.sin(a)*s;
+    p.spr.x=x;p.spr.y=y;p.spr.tint=color;p.spr.alpha=1;
+    p.spr.scale.set(rand(0.6,1.6));p.spr.visible=true;
+  }
+}
+function updateParticles(dt){
+  for(const p of particles){
+    if(!p.active)continue;
+    p.life-=dt;
+    if(p.life<=0){p.active=false;p.spr.visible=false;continue;}
+    p.spr.x+=p.vx*dt;p.spr.y+=p.vy*dt;
+    p.spr.alpha=p.life/p.maxLife;
+  }
+}
+
+/* ---------------- projectiles ---------------- */
+function makeProjPool(n,color,texRadius){
+  const pool=[];
+  for(let i=0;i<n;i++){
+    const s=new PIXI.Sprite(color===0xe8f4f8?bigCircleTex:circleTex);
+    s.anchor.set(0.5);s.tint=color;s.visible=false;
+    worldC.addChild(s);
+    pool.push({active:false,spr:s,x:0,y:0,vx:0,vy:0,dmg:0,radius:5,life:0});
+  }
+  return pool;
+}
+const pProj=makeProjPool(48,0xe8f4f8);
+const eProj=makeProjPool(64,0x4a4a7a);
+const iProj=makeProjPool(32,0xff1a3c);
+function fireProj(pool,x,y,tx,ty,speed,dmg,radius,life){
+  const pr=pool.find(q=>!q.active);if(!pr)return;
+  const a=Math.atan2(ty-y,tx-x);
+  pr.active=true;pr.x=x;pr.y=y;
+  pr.vx=Math.cos(a)*speed;pr.vy=Math.sin(a)*speed;
+  pr.dmg=dmg;pr.radius=radius;pr.life=life;
+  pr.spr.visible=true;pr.spr.x=x;pr.spr.y=y;pr.spr.scale.set(radius/5);
+}
+function updateProjPool(pool,dt,onHitPlayer,onBounds){
+  for(const pr of pool){
+    if(!pr.active)continue;
+    pr.life-=dt;
+    pr.px=pr.x;pr.py=pr.y;   // remember previous position for swept collision
+    pr.x+=pr.vx*dt;pr.y+=pr.vy*dt;
+    pr.spr.x=pr.x;pr.spr.y=pr.y;
+    if(pr.life<=0||pr.x<arena.x-10||pr.x>arena.x+arena.w+10||pr.y<arena.y-10||pr.y>arena.y+arena.h+10){
+      pr.active=false;pr.spr.visible=false;continue;
+    }
+    if(onHitPlayer)onHitPlayer(pr);
+  }
+}
+
+/* ---------------- enemies ---------------- */
+const enemies=[];
+function spawnPoint(){
+  for(let tries=0;tries<12;tries++){
+    const side=(Math.random()*4)|0;
+    let x,y;
+    if(side===0){x=rand(arena.x,arena.x+arena.w);y=arena.y+10;}
+    else if(side===1){x=rand(arena.x,arena.x+arena.w);y=arena.y+arena.h-10;}
+    else if(side===2){x=arena.x+10;y=rand(arena.y,arena.y+arena.h*0.7);}
+    else{x=arena.x+arena.w-10;y=rand(arena.y,arena.y+arena.h*0.7);}
+    if(dist2(x,y,player.x,player.y)>150)return{x,y};
+  }
+  return{x:arena.x+arena.w/2,y:arena.y+20};
+}
+function spawnEnemy(type){
+  const diffMult=(aiConfig?(0.8+(aiConfig.difficulty||0.6)*0.45):1)*(1+(round-1)*0.15);
+  const c=spawnPoint();
+  const cont=new PIXI.Container();
+  const glow=new PIXI.Sprite(glowTex);
+  glow.anchor.set(0.5);glow.alpha=0.3;glow.scale.set(0.5);
+  const g=new PIXI.Graphics();
+  const bar=new PIXI.Graphics();
+  cont.addChild(glow,g,bar);
+  const e={type,x:c.x,y:c.y,alive:true,cont,glow,g,bar,
+    cd:rand(0.5,1.8),wobT:0,wob:0,meleeCd:0,strafe:Math.random()<0.5?1:-1,
+    strafeT:0,shootT:rand(0.8,1.6),burst:0,
+    teleT:0,lungeT:0,lungeCd:rand(1,2.5),lungeVX:0,lungeVY:0};
+  if(type==='drone'){
+    e.maxHp=e.hp=Math.round(30*diffMult);e.speed=80;e.dmg=10;e.range=350;e.rate=1.5;
+    e.radius=14;e.color=0x4a4a7a;
+    glow.tint=0x4a4a7a;
+    g.lineStyle(1.5,0x4a4a7a,0.9);
+    g.beginFill(0x0d0d1a,0.9);
+    const pts=[];for(let i=0;i<6;i++){const a=i*Math.PI/3+Math.PI/6;pts.push(Math.cos(a)*13,Math.sin(a)*13);}
+    g.drawPolygon(pts);g.endFill();
+    g.beginFill(0x4a4a7a,0.8);g.drawCircle(0,0,3);g.endFill();
+  }else{
+    e.maxHp=e.hp=Math.round(20*diffMult);e.speed=150;e.dmg=15;e.range=0;e.rate=0;
+    e.radius=10;e.color=0x2a1a2a;
+    glow.tint=0x7a2a4a;
+    g.lineStyle(1.5,0x7a2a4a,0.9);
+    g.beginFill(0x160a14,0.9);
+    g.drawPolygon([0,-11,9,0,0,11,-9,0]);g.endFill();
+    g.beginFill(0xff1a3c,0.7);g.drawCircle(0,0,2.4);g.endFill();
+  }
+  cont.x=e.x;cont.y=e.y;
+  worldC.addChild(cont);
+  enemies.push(e);
+  spawnParticles(e.x,e.y,e.color,6,90);
+}
+function drawEnemyBar(e){
+  e.bar.clear();
+  e.bar.beginFill(0x000000,0.6);e.bar.drawRect(-13,-e.radius-10,26,3);e.bar.endFill();
+  e.bar.beginFill(0x8a8ac8,0.9);
+  e.bar.drawRect(-13,-e.radius-10,26*Math.max(0,e.hp/e.maxHp),3);e.bar.endFill();
+}
+function killEnemy(e,idx){
+  e.alive=false;
+  spawnParticles(e.x,e.y,e.color,14,180);
+  spawnParticles(e.x,e.y,0xffffff,4,120);
+  sfx.eHit();
+  worldC.removeChild(e.cont);e.cont.destroy({children:true});
+  enemies.splice(idx,1);
+}
+
+/* ---------------- impostor ---------------- */
+const impostor={
+  active:false,dead:false,x:0,y:0,hp:80,maxHp:80,radius:22,speed:160,
+  strategy:"observe",prediction:null,fragmentation:0.2,t:0,
+  fireCd:0,freezeT:0,dashT:0,dashVX:0,dashVY:0,ambushCd:0,orbitAngle:0,
+  predCd:0,watch:null,peel:null,
+  cont:null,fragSprite:null,glowSpr:null,bar:null,
+  fragCanvas:null,fragCtx:null,fragBase:null,fragTex:null,
+  predictionCorrect:0,predictionTotal:0
+};
+function impostorSetupVisual(srcCanvas){
+  // snapshot the player's silhouette, recolor it as a corrupted red inversion
+  const w=Math.round(srcCanvas.width*0.5),h=Math.round(srcCanvas.height*0.5);
+  if(!impostor.fragCanvas){
+    impostor.fragCanvas=document.createElement('canvas');
+    impostor.fragCtx=impostor.fragCanvas.getContext('2d',{willReadFrequently:true});
+  }
+  const fc=impostor.fragCanvas;fc.width=w;fc.height=h;
+  const tmp=document.createElement('canvas');tmp.width=w;tmp.height=h;
+  const tx=tmp.getContext('2d',{willReadFrequently:true});
+  tx.drawImage(srcCanvas,0,0,w,h);
+  const img=tx.getImageData(0,0,w,h);
+  const d=img.data;
+  for(let i=0;i<d.length;i+=4){
+    if(d[i+3]===0)continue;
+    const lum=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];
+    const inv=255-lum;
+    d[i]=clamp(250-lum*0.6,80,255);   // inverted crimson, guaranteed visible
+    d[i+1]=inv*0.09;
+    d[i+2]=inv*0.17;
+  }
+  tx.putImageData(img,0,0);
+  impostor.fragBase=img;
+  impostor.fragCtx.drawImage(tmp,0,0);
+  impostor.fragTex=PIXI.Texture.from(fc);
+
+  if(!impostor.cont){
+    impostor.cont=new PIXI.Container();
+    impostor.glowSpr=new PIXI.Sprite(glowTex);
+    impostor.glowSpr.anchor.set(0.5);impostor.glowSpr.tint=0xff1a3c;
+    impostor.fragSprite=new PIXI.Sprite(impostor.fragTex);
+    impostor.fragSprite.anchor.set(0.5,0.5);
+    impostor.bar=new PIXI.Graphics();
+    impostor.cont.addChild(impostor.glowSpr,impostor.fragSprite,impostor.bar);
+    worldC.addChild(impostor.cont);
+  }else{
+    impostor.fragSprite.texture=impostor.fragTex;
+  }
+  const targetH=round>=3?150:115;
+  const s=targetH/h;
+  impostor.fragSprite.scale.set(s);
+  impostor.glowSpr.scale.set(targetH/128*2.4);
+  impostor.cont.visible=false;
+}
+function updateImpostorFrag(){
+  // randomly zero pixels to create dissolving effect
+  if(!impostor.fragBase||!impostor.active)return;
+  const fc=impostor.fragCanvas,x=impostor.fragCtx;
+  const img=x.createImageData(fc.width,fc.height);
+  const src=impostor.fragBase.data,out=img.data;
+  const f=impostor.fragmentation;
+  for(let i=0;i<src.length;i+=4){
+    if(src[i+3]>0&&Math.random()<f){continue;}
+    out[i]=src[i];out[i+1]=src[i+1];out[i+2]=src[i+2];out[i+3]=src[i+3];
+  }
+  x.putImageData(img,0,0);
+  impostor.fragTex.baseTexture.update();
+}
+function drawImpostorBar(){
+  const b=impostor.bar;if(!b)return;
+  b.clear();
+  b.beginFill(0x000000,0.6);b.drawRect(-22,-46,44,3);b.endFill();
+  b.beginFill(0xff1a3c,0.9);
+  b.drawRect(-22,-46,44*Math.max(0,impostor.hp/impostor.maxHp),3);b.endFill();
+}
+
+/* prediction indicator (pixi, above impostor) */
+const predBox=new PIXI.Container();
+const predBg=new PIXI.Graphics();
+const predTitle=new PIXI.Text("IMPOSTOR PREDICTS",{fontFamily:'"Space Mono", monospace',fontSize:9,fill:0xffe44d,letterSpacing:2});
+const predText=new PIXI.Text("—",{fontFamily:'"Space Mono", monospace',fontSize:13,fontWeight:'bold',fill:0xffffff});
+predBox.addChild(predBg,predTitle,predText);
+predBox.visible=false;
+app.stage.addChild(predBox);
+let predBoxT=0;
+function showPrediction(title,text,secs,color){
+  predTitle.text=title;
+  predText.text=text;
+  predTitle.style.fill=color===undefined?0xffe44d:color;
+  predText.style.fill=color===undefined?0xffffff:color;
+  predBg.clear();
+  const w=Math.max(predTitle.width,predText.width)+20;
+  const h=predTitle.height+predText.height+18;
+  predBg.lineStyle(1,color===undefined?0xffe44d:color,0.9);
+  predBg.beginFill(0x000000,0.75);
+  predBg.drawRect(-w/2,-h-14,w,h);predBg.endFill();
+  predTitle.x=-predTitle.width/2;predTitle.y=-h-8;
+  predText.x=-predText.width/2;predText.y=-h-8+predTitle.height+6;
+  predBox.visible=true;predBox.alpha=1;predBoxT=secs;
+}
+
+/* impostor brain */
+function dodgeVec(dir){return DIRV[dir]||{x:1,y:0};}
+function impostorFireAt(tx,ty){
+  fireProj(iProj,impostor.x,impostor.y,tx,ty,280,18,5,3.0);
+  noteEnemyShot();
+}
+function impostorSetPredictionFromProfile(){
+  const dom=(aiConfig&&aiConfig.strategy==="exploit_dodge"&&tracker.profile.dominantDodge)
+    ?tracker.profile.dominantDodge:liveDominant();
+  impostor.prediction=dom;
+}
+function startDodgePredictionWatch(){
+  impostor.predictionTotal++;
+  impostor.watch={until:now()+700,dx:0,dy:0,pred:impostor.prediction};
+  if(impostor.prediction)
+    showPrediction("IMPOSTOR PREDICTS","→ DODGE "+impostor.prediction.toUpperCase(),2);
+}
+function resolveWatch(){
+  const w=impostor.watch;impostor.watch=null;
+  const moved=classify(w.dx,w.dy);
+  if(Math.abs(w.dx)+Math.abs(w.dy)<12)return; // barely moved — no verdict
+  if(moved===w.pred){
+    impostor.predictionCorrect++;
+    showPrediction("PATTERN CONFIRMED ✓","YOU DID IT ANYWAY",1.5,0xffe44d);
+    sfx.confirm();
+    $('pattern-log').textContent="PATTERN CONFIRMED ✓";
+    setTimeout(()=>{$('pattern-log').textContent="";},2500);
+  }else{
+    impostor.freezeT=1.0;
+    glitchFlash();
+    showPrediction("RECALIBRATING...","",1.2,0xff1a3c);
+    impostorSetPredictionFromProfile();
+  }
+}
+function updateImpostor(dt){
+  if(!impostor.active||impostor.dead||impostor.peel)return;
+  impostor.t+=dt;
+  // blink away when the player focuses fire
+  impostor.blinkCd-=dt;
+  if((impostor._dmgAcc||0)>30&&impostor.blinkCd<=0){
+    impostor._dmgAcc=0;impostor.blinkCd=4;
+    spawnParticles(impostor.x,impostor.y,0xff1a3c,16,200);
+    if(dist2(impostor.x,impostor.y,player.x,player.y)<340){
+      // jump to the far side of the arena
+      impostor.x=player.x<arena.x+arena.w/2?arena.x+arena.w-60:arena.x+60;
+      impostor.y=player.y<arena.y+arena.h/2?arena.y+arena.h-60:arena.y+60;
+    }else{
+      const c=spawnPoint();impostor.x=c.x;impostor.y=c.y;
+    }
+    glitchFlash();
+    spawnParticles(impostor.x,impostor.y,0xff1a3c,16,200);
+    showPrediction("REPOSITIONING","",1,0xff1a3c);
+    sfx.ominous();
+    positionImpostorSprites();
+  }
+  if(impostor.freezeT>0){impostor.freezeT-=dt;positionImpostorSprites();return;}
+  const px=player.x,py=player.y;
+  const d=dist2(impostor.x,impostor.y,px,py);
+  const strat=impostor.strategy;
+  let mvx=0,mvy=0;
+  const stag=clamp((impostor.t-0.0)/1,0,1);
+
+  if(strat==="mirror"){
+    // moves like you, but wrong: mirrors player velocity from delayed history
+    playerHistory.push({x:player.x,y:player.y});
+    if(playerHistory.length>45)playerHistory.shift();
+    const target=playerHistory[0]||{x:px,y:py};
+    const mx=app.screen.width-target.x, my=target.y;
+    const a=Math.atan2(my-impostor.y,mx-impostor.x);
+    mvx=Math.cos(a);mvy=Math.sin(a);
+    if(impostor.t>15){
+      impostor.fireCd-=dt;
+      if(impostor.fireCd<=0){impostor.fireCd=2.2;impostorFireAt(px,py);}
+    }
+  }
+  else if(strat==="exploit_dodge"){
+    if(!impostor.prediction)impostorSetPredictionFromProfile();
+    const dir=dodgeVec(impostor.prediction);
+    const tx=px+dir.x*170,ty=py+dir.y*170;
+    steerTo(tx,ty,1);
+    impostor.fireCd-=dt;impostor.predCd-=dt;
+    if(impostor.fireCd<=0&&dist2(impostor.x,impostor.y,tx,ty)<60){
+      impostor.fireCd=2.0*rand(0.85,1.2);
+      impostorFireAt(px,py);
+      // punish shot: aims where it thinks you will dodge, not where you are
+      if(Math.random()<0.35&&impostor.prediction){
+        const pdv=dodgeVec(impostor.prediction);
+        fireProj(iProj,impostor.x,impostor.y,px+pdv.x*130,py+pdv.y*130,280,18,5,3.0);
+      }
+      startDodgePredictionWatch();
+    }
+  }
+  else if(strat==="exploit_position"){
+    const pref=tracker.profile.positionPreference||"center";
+    if(pref==="center"){
+      impostor.orbitAngle+=dt*0.9;
+      const tx=px+Math.cos(impostor.orbitAngle)*210,ty=py+Math.sin(impostor.orbitAngle)*210;
+      steerTo(tx,ty,1);
+    }else{
+      const wx=px<arena.x+arena.w/2?arena.x:arena.x+arena.w;
+      const wy=py<arena.y+arena.h/2?arena.y:arena.y+arena.h;
+      const cx=(Math.abs(px-wx)<Math.abs(py-wy))?wx:px;
+      const cy=(Math.abs(px-wx)<Math.abs(py-wy))?py:wy;
+      const tx=px+(cx-px)*0.35,ty=py+(cy-py)*0.35;
+      steerTo(tx,ty,1);
+    }
+    impostor.fireCd-=dt;
+    if(impostor.fireCd<=0&&d<520){impostor.fireCd=1.7;impostorFireAt(px,py);}
+    if(impostor.predCd<=0){impostor.predCd=6;showPrediction("ROUTE CONTROL","CUTTING OFF "+pref.toUpperCase(),2);}
+  }
+  else if(strat==="bait"){
+    // moves slow, appears vulnerable — dodges when you shoot, then counterattacks
+    const wasDashing=impostor.dashT>0;
+    impostor.baitCd=(impostor.baitCd||0)-dt;
+    if(tracker.shotsFired>(impostor._seenShots||0)){
+      impostor._seenShots=tracker.shotsFired;
+      if(d<430&&impostor.dashT<=0&&impostor.baitCd<=0){
+        impostor.baitCd=1.1;
+        const a=Math.atan2(impostor.y-py,impostor.x-px)+(Math.random()<0.5?Math.PI/2:-Math.PI/2);
+        impostor.dashVX=Math.cos(a)*impostor.speed*2.2;
+        impostor.dashVY=Math.sin(a)*impostor.speed*2.2;
+        impostor.dashT=0.22;
+      }
+    }
+    if(impostor.dashT>0){
+      impostor.dashT-=dt;
+      impostor.x+=impostor.dashVX*dt;impostor.y+=impostor.dashVY*dt;
+      if(impostor.dashT<=0&&wasDashing){impostor.fireCd=0.08;impostor._volley=2;} // counterattack
+    }else{
+      if(d>250)steerTo(px,py,0.45);else steerTo(px,py,-0.3);
+    }
+    impostor.fireCd-=dt;
+    if(impostor.fireCd<=0&&d<560){
+      impostor.fireCd=impostor._volley>0?0.14:2.2;
+      if(impostor._volley>0)impostor._volley--;
+      impostorFireAt(px,py);
+    }
+    if(impostor.predCd<=0){impostor.predCd=7;showPrediction("VULNERABILITY","FEIGNED",2);}
+  }
+  else if(strat==="ambush"){
+    impostor.ambushCd-=dt;
+    if(impostor.dashT>0){
+      impostor.dashT-=dt;
+      impostor.x+=impostor.dashVX*dt;impostor.y+=impostor.dashVY*dt;
+      if(impostor.fireCd<=0){impostor.fireCd=0.5;impostorFireAt(px,py);}
+      impostor.fireCd-=dt;
+    }else{
+      const ex=impostor.x<arena.x+arena.w/2?arena.x+30:arena.x+arena.w-30;
+      steerTo(ex,arena.y+arena.h*0.25,0.8);
+      const playerBusy=input.mouse.leftDown||eProj.some(q=>q.active);
+      if(playerBusy&&impostor.ambushCd<=0){
+        impostor.ambushCd=5;
+        const a=Math.atan2(py-impostor.y,px-impostor.x);
+        impostor.dashVX=Math.cos(a)*impostor.speed*3.1;
+        impostor.dashVY=Math.sin(a)*impostor.speed*3.1;
+        impostor.dashT=0.8;
+        showPrediction("AMBUSH","NOW",1,0xff1a3c);
+        sfx.impostorAppear();
+      }
+    }
+  }
+  else{ // predict_and_intercept
+    const projT=clamp(d/280,0,1.2);
+    let lx=px+player.vx*projT,ly=py+player.vy*projT;
+    lx=clamp(lx,arena.x,arena.x+arena.w);ly=clamp(ly,arena.y,arena.y+arena.h);
+    const strafe=Math.sin(impostor.t*1.7)*120;
+    const pa=Math.atan2(ly-impostor.y,lx-impostor.x)+Math.PI/2;
+    steerTo(lx+Math.cos(pa)*strafe*0.3,ly+Math.sin(pa)*strafe*0.3,1.15);
+    impostor.fireCd-=dt;
+    if(impostor.fireCd<=0&&d<620){
+      impostor.fireCd=1.6*rand(0.8,1.15);
+      const lt=clamp(dist2(impostor.x,impostor.y,px,py)/280,0,1.2);
+      // 3-shot spread volley, lead on your velocity
+      const tx=px+player.vx*lt,ty=py+player.vy*lt;
+      const base=Math.atan2(ty-impostor.y,tx-impostor.x);
+      for(const off of[-0.16,0,0.16]){
+        fireProj(iProj,impostor.x,impostor.y,
+          impostor.x+Math.cos(base+off)*400,
+          impostor.y+Math.sin(base+off)*400,280,18,5,3.0);
+      }
+      noteEnemyShot();
+    }
+    if(impostor.predCd<=0){impostor.predCd=8;showPrediction("FULL PROFILE ACTIVE","INTERCEPT VECTORS",2);}
+  }
+
+  function steerTo(tx,ty,mult){
+    const a=Math.atan2(ty-impostor.y,tx-impostor.x);
+    const dd=dist2(impostor.x,impostor.y,tx,ty);
+    if(dd<8)return;
+    const spd=impostor.speed*(mult||1)*stag;
+    impostor.x+=Math.cos(a)*spd*dt;
+    impostor.y+=Math.sin(a)*spd*dt;
+  }
+  impostor.x=clamp(impostor.x,arena.x+20,arena.x+arena.w-20);
+  impostor.y=clamp(impostor.y,arena.y+20,arena.y+arena.h-20);
+  positionImpostorSprites();
+}
+let playerHistory=[];
+function positionImpostorSprites(){
+  impostor.cont.x=impostor.x;impostor.cont.y=impostor.y;
+  drawImpostorBar();
+}
+
+/* ---------------- glitch + shake ---------------- */
+const cmf=new PIXI.filters.ColorMatrixFilter();
+function glitchFlash(){glitchFrames=4;scanTS.alpha=0.12;}
+function damageFlash(){
+  const f=$('hit-flash');
+  f.style.transition='none';f.style.opacity='0.28';
+  requestAnimationFrame(()=>{f.style.transition='opacity .25s ease';f.style.opacity='0';});
+}
+
+/* ---------------- damage ---------------- */
+function damagePlayer(d){
+  if(player.dead||player.invulnT>0)return;
+  player.hp-=d;player.invulnT=0.25;
+  triggerDodgeWatch();
+  damageFlash();shakeMag=7;sfx.pHit();
+  updateHpBar();
+  if(player.hp<=0){player.hp=0;playerDie();}
+}
+function updateHpBar(){
+  const pct=clamp(player.hp/player.maxHp,0,1);
+  const el=$('hp-fill');
+  el.style.width=(pct*100)+'%';
+  el.style.background=pct>0.5?'var(--ui-green)':pct>0.2?'var(--ui-yellow)':'var(--ui-red)';
+}
+
+/* ---------------- player logic ---------------- */
+function getInputDir(){
+  let vx=0,vy=0;
+  if(input.keys['KeyW']||input.keys['ArrowUp'])vy=-1;
+  if(input.keys['KeyS']||input.keys['ArrowDown'])vy=1;
+  if(input.keys['KeyA']||input.keys['ArrowLeft'])vx=-1;
+  if(input.keys['KeyD']||input.keys['ArrowRight'])vx=1;
+  if(vx!==0&&vy!==0){vx*=0.707;vy*=0.707;}
+  return{x:vx,y:vy};
+}
+function updatePlayer(dt){
+  if(player.dead)return;
+  const dir=getInputDir();
+  player.vx=dir.x*player.speed;player.vy=dir.y*player.speed;
+  const nx=player.x+player.vx*dt,ny=player.y+player.vy*dt;
+  player.dxFrame=nx-player.x;player.dyFrame=ny-player.y;
+  player.x=clamp(nx,arena.x+player.r,arena.x+arena.w-player.r);
+  player.y=clamp(ny,arena.y+player.r,arena.y+arena.h-player.r);
+  tracker.distanceTraveled+=Math.abs(player.dxFrame)+Math.abs(player.dyFrame);
+
+  // reaction-time input change detection
+  for(const k of['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight']){
+    if(input.keys[k]&&!input['_prev_'+k])onInputChange(k);
+    input['_prev_'+k]=input.keys[k];
+  }
+
+  // shooting
+  player.shootCd-=dt;
+  if(player.shootCd<=0&&input.mouse.leftDown){
+    player.shootCd=0.25;
+    fireProj(pProj,player.x,player.y,input.mouse.x,input.mouse.y,600,25,4,2.0);
+    tracker.shotsFired++;
+    sfx.shoot();
+  }
+  if(player.invulnT>0)player.invulnT-=dt;
+
+  // position sampling
+  posSampleTimer-=dt;
+  if(posSampleTimer<=0){
+    posSampleTimer=2;
+    tracker.positionSamples.push({
+      x:(player.x-arena.x)/arena.w,y:(player.y-arena.y)/arena.h});
+    if(tracker.positionSamples.length>90)tracker.positionSamples.shift();
+  }
+
+  // dodge watch accumulation
+  if(dodgeWatch.active){
+    dodgeWatch.dx+=player.dxFrame;dodgeWatch.dy+=player.dyFrame;
+    if(now()>dodgeWatch.until){
+      if(Math.abs(dodgeWatch.dx)+Math.abs(dodgeWatch.dy)>14){
+        tracker.dodgeDirections[classify(dodgeWatch.dx,dodgeWatch.dy)]++;
+      }
+      dodgeWatch.active=false;
+    }
+  }
+  if(impostor.watch){
+    impostor.watch.dx+=player.dxFrame;impostor.watch.dy+=player.dyFrame;
+    if(now()>impostor.watch.until)resolveWatch();
+  }
+}
+
+/* ---------------- fx (per frame visuals) ---------------- */
+function updateFx(dt){
+  simTime+=dt;
+  scanTS.tilePosition.y-=dt*8;
+  if(scanTS.alpha>0.03)scanTS.alpha=Math.max(0.03,scanTS.alpha-dt*0.3);
+
+  // shake
+  if(shakeMag>0.1){
+    rootC.x=rand(-shakeMag,shakeMag);rootC.y=rand(-shakeMag,shakeMag);
+    shakeMag*=Math.pow(0.001,dt);
+  }else{rootC.x=0;rootC.y=0;}
+
+  // glitch
+  if(glitchFrames>0){
+    glitchFrames--;
+    cmf.hue(rand(40,140),false);
+    rootC.filters=[cmf];
+    rootC.x+=rand(-8,8);
+    if(glitchFrames<=0){rootC.filters=null;}
+  }
+
+  // fx graphics: aim line + hitbox marker + crosshair
+  fxG.clear();
+  if(state===GS.PLAYING&&!player.dead){
+    // hitbox marker
+    fxG.lineStyle(1,0xe8f4f8,0.35);
+    fxG.drawCircle(player.x,player.y,player.r);
+    fxG.lineStyle(1,0xe8f4f8,0.15);
+    fxG.drawCircle(player.x,player.y,player.r+6+Math.sin(simTime*3)*2);
+    // dashed aim line
+    const mx=input.mouse.x,my=input.mouse.y;
+    const len=dist2(player.x,player.y,mx,my);
+    const steps=Math.floor(len/16);
+    fxG.lineStyle(1,0xe8f4f8,0.15);
+    for(let i=2;i<steps;i+=2){
+      const t1=i/steps,t2=Math.min((i+1)/steps,1);
+      fxG.moveTo(player.x+(mx-player.x)*t1,player.y+(my-player.y)*t1);
+      fxG.lineTo(player.x+(mx-player.x)*t2,player.y+(my-player.y)*t2);
+    }
+  }
+  // crosshair
+  fxG.lineStyle(1.5,0xe8f4f8,0.8);
+  const cx=input.mouse.x,cy=input.mouse.y;
+  fxG.moveTo(cx-8,cy);fxG.lineTo(cx-3,cy);
+  fxG.moveTo(cx+3,cy);fxG.lineTo(cx+8,cy);
+  fxG.moveTo(cx,cy-8);fxG.lineTo(cx,cy-3);
+  fxG.moveTo(cx,cy+3);fxG.lineTo(cx,cy+8);
+
+  // displacement shimmer on player sprite
+  if(playerSprite){
+    dispSprite.x+=dt*30;dispSprite.y+=dt*17;
+    let target=4;
+    if(impostor.active&&!impostor.dead){
+      const d=dist2(player.x,player.y,impostor.x,impostor.y);
+      target=4+clamp(1-d/450,0,1)*26;
+    }
+    dispFilter.scale.x+=(target-dispFilter.scale.x)*dt*4;
+    dispFilter.scale.y=dispFilter.scale.x;
+  }
+
+  // impostor glow pulse + prediction box position
+  if(impostor.active&&!impostor.dead&&impostor.glowSpr){
+    impostor.glowSpr.alpha=0.35+0.18*Math.sin(simTime*4)+impostor.fragmentation*0.15;
+    if(predBox.visible){
+      predBox.x=clamp(impostor.x,arena.x+100,arena.x+arena.w-100);
+      predBox.y=Math.max(impostor.y-40,arena.y+95);
+      predBoxT-=dt;
+      if(predBoxT<=0){
+        predBox.alpha-=dt*3;
+        if(predBox.alpha<=0)predBox.visible=false;
+      }
+    }
+  }
+}
+
+/* ---------------- enemies update ---------------- */
+function eProjNearPlayer(){
+  for(const pr of eProj)if(pr.active&&dist2(pr.x,pr.y,player.x,player.y)<80)return true;
+  for(const pr of iProj)if(pr.active&&dist2(pr.x,pr.y,player.x,player.y)<80)return true;
+  return false;
+}
+function droneFire(e){
+  // leads the target increasingly in later rounds; projectile speed scales too
+  const ps=200+(round-1)*35;
+  const leadF=(round-1)*0.5;
+  const t=clamp(dist2(e.x,e.y,player.x,player.y)/ps,0,0.6)*leadF;
+  fireProj(eProj,e.x,e.y,
+    player.x+player.vx*t+rand(-24,24),
+    player.y+player.vy*t+rand(-24,24),
+    ps,10,6,3.0);
+  noteEnemyShot();
+}
+function updateEnemies(dt){
+  for(let i=enemies.length-1;i>=0;i--){
+    const e=enemies[i];
+    e.wobT-=dt;
+    if(e.wobT<=0){e.wobT=1;e.wob=rand(-15,15)*Math.PI/180;}
+    e.strafeT-=dt;
+    if(e.strafeT<=0){e.strafeT=rand(1.5,3);e.strafe*=-1;}
+    const d=dist2(e.x,e.y,player.x,player.y);
+    const busy=(e.type==='hunter'&&(e.teleT>0||e.lungeT>0));
+    if(!busy){
+      let tx,ty;
+      if(e.type==='hunter'){
+        const dv=dodgeVec(liveDominant());
+        tx=player.x+dv.x*120;ty=player.y+dv.y*120;
+      }else{tx=player.x;ty=player.y;}
+      let a=Math.atan2(ty-e.y,tx-e.x)+e.wob;
+      if(e.type==='drone'&&d<e.range*0.9){
+        const sa=a+Math.PI/2*e.strafe;
+        e.x+=Math.cos(sa)*e.speed*0.4*dt;e.y+=Math.sin(sa)*e.speed*0.4*dt;
+      }else{
+        e.x+=Math.cos(a)*e.speed*dt;e.y+=Math.sin(a)*e.speed*dt;
+      }
+    }
+    // separation
+    for(const o of enemies){
+      if(o===e||!o.alive)continue;
+      const dd=dist2(e.x,e.y,o.x,o.y);
+      if(dd<e.radius+o.radius+6&&dd>0.01){
+        const push=(e.radius+o.radius+6-dd)*0.5;
+        e.x+=(e.x-o.x)/dd*push;e.y+=(e.y-o.y)/dd*push;
+      }
+    }
+    e.x=clamp(e.x,arena.x+e.radius,arena.x+arena.w-e.radius);
+    e.y=clamp(e.y,arena.y+e.radius,arena.y+arena.h-e.radius);
+
+    if(e.type==='drone'){
+      e.cd-=dt;
+      if(d<e.range&&e.cd<=0){
+        if(e.burst<=0)e.burst=(round>=2?3:1);  // burst fire from round 2
+        e.burst--;
+        e.cd=e.burst>0?0.15:e.rate*spawnTensionMult*rand(0.85,1.2);
+        droneFire(e);
+      }
+    }else{
+      // telegraphed lunge aimed at the side you habitually dodge toward
+      e.lungeCd-=dt;
+      if(e.teleT>0){
+        e.teleT-=dt;
+        e.glow.tint=0xff1a3c;
+        e.glow.alpha=0.45+0.3*Math.sin(simTime*30);
+        if(e.teleT<=0){
+          const dv=dodgeVec(liveDominant());
+          const tx=player.x+dv.x*140,ty=player.y+dv.y*140;
+          const la=Math.atan2(ty-e.y,tx-e.x);
+          e.lungeVX=Math.cos(la)*e.speed*3.2;e.lungeVY=Math.sin(la)*e.speed*3.2;
+          e.lungeT=0.35;
+        }
+      }else if(e.lungeT>0){
+        e.lungeT-=dt;
+        e.x+=e.lungeVX*dt;e.y+=e.lungeVY*dt;
+        if(e.lungeT<=0)e.glow.tint=0x7a2a4a;
+      }else if(d<180&&e.lungeCd<=0){
+        e.teleT=0.4;
+        e.lungeCd=rand(3,4.5);
+        playTone(220,'square',0.12,0.08);
+      }else{
+        e.glow.tint=0x7a2a4a;
+      }
+      e.meleeCd-=dt;
+      if(d<e.radius+player.r+6&&e.meleeCd<=0){
+        e.meleeCd=0.8;damagePlayer(e.dmg);
+      }
+    }
+    e.cont.x=e.x;e.cont.y=e.y;
+    e.g.rotation+=dt*(e.type==='drone'?0.8:2.2)*e.strafe;
+    drawEnemyBar(e);
+    if(e.type==='drone')e.glow.alpha=0.2+0.12*Math.sin(simTime*5+i);
+  }
+}
+
+/* ---------------- collisions ---------------- */
+function sweptHit(pr,target){
+  // current position + midpoint of the frame's travel (prevents tunneling)
+  if(circleCollide(pr,target))return true;
+  if(pr.px!==undefined){
+    const mid={x:(pr.x+pr.px)/2,y:(pr.y+pr.py)/2,radius:pr.radius};
+    return circleCollide(mid,target);
+  }
+  return false;
+}
+function checkCollisions(){
+  // player projectiles vs enemies + impostor
+  for(const pr of pProj){
+    if(!pr.active)continue;
+    for(let i=enemies.length-1;i>=0;i--){
+      const e=enemies[i];
+      if(sweptHit(pr,e)){
+        pr.active=false;pr.spr.visible=false;
+        e.hp-=pr.dmg;
+        spawnParticles(pr.x,pr.y,e.color,4,90);
+        if(e.hp<=0)killEnemy(e,i);else sfx.eHit();
+        break;
+      }
+    }
+    if(pr.active&&impostor.active&&!impostor.dead){
+      const ib={x:impostor.x,y:impostor.y,radius:impostor.radius};
+      if(sweptHit(pr,ib)){
+        pr.active=false;pr.spr.visible=false;
+        impostor.hp-=pr.dmg;
+        impostor._dmgAcc=(impostor._dmgAcc||0)+pr.dmg;
+        spawnParticles(pr.x,pr.y,0xff1a3c,5,110);
+        sfx.eHit();
+        drawImpostorBar();
+        if(impostor.hp<=0)impostorDie();
+      }
+    }
+  }
+  // enemy + impostor projectiles vs player
+  if(!player.dead){
+    const hitTest=(pr)=>{
+      if(sweptHit(pr,{x:player.x,y:player.y,radius:player.r})){
+        pr.active=false;pr.spr.visible=false;
+        damagePlayer(pr.dmg);
+      }
+    };
+    for(const pr of eProj)if(pr.active)hitTest(pr);
+    for(const pr of iProj)if(pr.active)hitTest(pr);
+    // impostor contact damage
+    if(impostor.active&&!impostor.dead&&
+      dist2(player.x,player.y,impostor.x,impostor.y)<player.r+impostor.radius&&
+      player.invulnT<=0){damagePlayer(12);}
+    // near-miss → possible dodge
+    if(eProjNearPlayer())triggerDodgeWatch();
+  }
+}
+
+/* ---------------- impostor death / player death ---------------- */
+function impostorDie(){
+  impostor.dead=true;
+  spawnParticles(impostor.x,impostor.y,0xff1a3c,30,260);
+  spawnParticles(impostor.x,impostor.y,0xffffff,10,180);
+  impostor.cont.visible=false;predBox.visible=false;
+  glitchFlash();shakeMag=10;sfx.die();
+  if(round>=3){setTimeout(()=>{if(state===GS.PLAYING)winGame();},900);}
+  else{
+    // it reconstitutes for round 3
+    $('sys-note').textContent="IMPOSTOR FORM: DISSOLVED — RE-EQUATION PENDING";
+  }
+}
+function playerDie(){
+  player.dead=true;
+  spawnParticles(player.x,player.y,0xe8f4f8,26,240);
+  spawnParticles(player.x,player.y,0xff1a3c,16,180);
+  shakeMag=12;sfx.die();
+  setTimeout(()=>endGame(false),1100);
+}
+
+/* ---------------- round flow ---------------- */
+const roundPlans={
+  1:{duration:60, aliveCap:4, mix:{drone:1},    impostor:false, spawnInterval:2.8},
+  2:{duration:90, aliveCap:5, mix:{drone:0.65}, impostor:true,  spawnInterval:2.4},
+  3:{duration:120,aliveCap:6, mix:{drone:0.5},  impostor:true,  spawnInterval:2.0}
+};
+const annSub={1:"CALIBRATION IN PROGRESS",2:"THE IMPOSTOR HAS ARRIVED",3:"IT ALREADY KNOWS HOW THIS ENDS"};
+function announce(r,s,cb){
+  $('ann-r').textContent=r;$('ann-s').textContent=s;
+  $('announce').style.opacity='1';
+  sfx.round();
+  setTimeout(()=>{$('announce').style.opacity='0';if(cb)cb();},2000);
+}
+function clearField(){
+  enemies.slice().forEach(e=>{worldC.removeChild(e.cont);e.cont.destroy({children:true});});
+  enemies.length=0;
+  [pProj,eProj,iProj].forEach(pool=>pool.forEach(pr=>{pr.active=false;pr.spr.visible=false;}));
+}
+function beginRound(n){
+  round=n;clearField();computeProfile();
+  if(droneOsc){try{droneOsc.frequency.setTargetAtTime(n>=3?70:55,audioCtx.currentTime,0.5);}catch(e){}}
+  layout();
+  const plan=roundPlans[n];
+  roundTimeLeft=plan.duration;
+  spawnTimer=1.2;
+  timeScale=1;
+  if(n>1&&!player.dead){  // partial integrity restore between rounds
+    player.hp=Math.min(player.maxHp,player.hp+25);
+    updateHpBar();
+  }
+  $('round-label').textContent="ROUND "+n;
+  $('sys-note').textContent=n===1?"SCANNING SUBJECT...":"PROFILE: "+(aiConfig?(aiConfig.worldState||'').toUpperCase():"—");
+  state=GS.ROUND_INTRO;
+  announce("ROUND "+n,annSub[n],()=>{
+    state=GS.PLAYING;
+    if(n===2&&plan.impostor&&!impostor._peeled){
+      startPeel();
+    }else if(plan.impostor){
+      activateImpostor(false);
+    }
+  });
+}
+function activateImpostor(fromPeel){
+  const plan=roundPlans[round];
+  impostor.active=true;impostor.dead=false;
+  impostor.maxHp=impostor.hp=round>=3?150:100;
+  impostor._dmgAcc=0;impostor.blinkCd=0;
+  impostor.speed=aiConfig?clamp(aiConfig.impostorSpeed||160,120,220):160;
+  impostor.strategy=aiConfig?aiConfig.strategy:(round===2?"mirror":"predict_and_intercept");
+  if(round>=3)impostor.strategy="predict_and_intercept";
+  impostor.fragmentation=round>=3?0.12:0.25;
+  impostor.t=0;impostor.freezeT=0;impostor.ambushCd=3;impostor.predCd=2;
+  impostor.fireCd=2;impostor._volley=0;impostor._seenShots=tracker.shotsFired;
+  playerHistory=[];
+  impostorSetPredictionFromProfile();
+  if(!fromPeel){
+    const c=spawnPoint();
+    impostor.x=c.x;impostor.y=c.y;
+    glitchFlash();
+  }
+  impostor.cont.visible=true;
+  positionImpostorSprites();
+  drawImpostorBar();
+  if(round>=3)showPrediction("FULL PROFILE ACTIVE","",3);
+  else if(impostor.strategy==="mirror"&&impostor.t<15)$('sys-note').textContent="IT MOVES LIKE YOU. WATCH.";
+}
+
+/* peel animation */
+function startPeel(){
+  impostor._peeled=true;
+  timeScale=0.2;
+  const src=getPlayerSourceCanvas();
+  impostorSetupVisual(src);
+  const from={x:app.screen.width/2,y:app.screen.height*0.75};
+  const to={x:app.screen.width*0.82,y:app.screen.height*0.22};
+  impostor.x=from.x;impostor.y=from.y;
+  impostor.active=true;impostor.dead=false;
+  impostor.cont.visible=true;
+  impostor.fragmentation=0.3;
+  positionImpostorSprites();
+  sfx.impostorAppear();
+  glitchFlash();
+  impostor.peel={t:0,dur:1.5,from,to,done:false};
+  $('sys-note').textContent="SUBJECT COPY: SEPARATING";
+}
+function updatePeel(dt){
+  const pl=impostor.peel;if(!pl||pl.done)return;
+  pl.t+=dt;
+  const k=easeInOut(clamp(pl.t/pl.dur,0,1));
+  impostor.x=pl.from.x+(pl.to.x-pl.from.x)*k;
+  impostor.y=pl.from.y+(pl.to.y-pl.from.y)*k;
+  impostor.fragmentation=0.3+0.5*k;
+  positionImpostorSprites();
+  if(pl.t>=pl.dur){
+    pl.done=true;impostor.peel=null;
+    timeScale=1;
+    impostor.fragmentation=0.25;
+    activateImpostor(true); // finalize stats/strategy at peel end
+    $('sys-note').textContent="IT CAME FROM YOU.";
+  }
+}
+
+/* ---------------- round end / AI ---------------- */
+function checkRoundEnd(dt){
+  roundTimeLeft-=dt;
+  $('round-timer').textContent=Math.max(0,Math.ceil(roundTimeLeft))+"s";
+  if(roundTimeLeft<=0)startRoundEnd();
+}
+function startRoundEnd(){
+  if(state!==GS.PLAYING)return;
+  state=GS.ROUND_END;
+  computeProfile();
+  if(round>=3){winGame();return;}
+  aiThinking();
+}
+async function aiThinking(){
+  state=GS.AI_THINKING;
+  const td=$('taunt-display');
+  $('taunt-source').textContent="SYSTEM";
+  $('taunt-text').textContent="IMPOSTOR ANALYZING...";
+  td.classList.add('pulse');td.style.display='block';
+  sfx.ominous();
+  let cfg;
+  try{cfg=await callImpostorAI(round+1,tracker.profile);}
+  catch(e){cfg=getDefaultImpostorConfig(round+1,tracker.profile);}
+  if(!cfg||!VALID_STRATS[cfg.strategy])cfg=getDefaultImpostorConfig(round+1,tracker.profile);
+  aiConfig=cfg;
+  td.classList.remove('pulse');
+  state=GS.TAUNT;
+  $('taunt-source').textContent="THE IMPOSTOR"+(cfg._provider?(" · MIND: "+cfg._provider):"");
+  $('taunt-text').textContent=cfg.taunt||"I have seen enough.";
+  lastAITaunt=cfg.taunt||"";
+  setTimeout(()=>{
+    td.style.display='none';
+    beginRound(round+1);
+  },4200);
+}
+
+/* ---------------- AI providers ---------------- */
+function keyIsSet(k){return k&&k.indexOf("YOUR_")!==0;}
+let activeAIProvider=null;
+async function fetchJSON(url,opts,timeoutMs){
+  const ctrl=new AbortController();
+  const to=setTimeout(()=>ctrl.abort(),timeoutMs||12000);
+  try{
+    const res=await fetch(url,Object.assign({},opts,{signal:ctrl.signal}));
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    return await res.json();
+  }finally{clearTimeout(to);}
+}
+function openAIStyleContent(data){
+  const msg=data&&data.choices&&data.choices[0]&&data.choices[0].message;
+  if(!msg)return"";
+  if(typeof msg.content==="string")return msg.content;
+  if(Array.isArray(msg.content))return msg.content.map(c=>(c&&c.text)||"").join("");
+  return"";
+}
+const PROVIDERS={
+  omniai:{
+    name:"OMNI AI",
+    configured:()=>keyIsSet(CONFIG.OMNIAI_API_KEY),
+    model:()=>CONFIG.OMNIAI_MODEL,
+    call:(system,user)=>fetchJSON("https://api.ideamart.io/omniai/api/v1/chat/completions",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":CONFIG.OMNIAI_API_KEY},
+      body:JSON.stringify({
+        model:CONFIG.OMNIAI_MODEL,max_tokens:450,temperature:0.8,
+        messages:[{role:"system",content:system},{role:"user",content:user}]
+      })
+    },12000).then(openAIStyleContent)
+  },
+  openrouter:{
+    name:"OPENROUTER",
+    configured:()=>keyIsSet(CONFIG.OPENROUTER_API_KEY),
+    model:()=>CONFIG.OPENROUTER_MODEL,
+    call:(system,user)=>fetchJSON("https://openrouter.ai/api/v1/chat/completions",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "Authorization":"Bearer "+CONFIG.OPENROUTER_API_KEY,
+        "HTTP-Referer":(typeof location!=="undefined"&&location.origin&&location.origin!=="null")?location.origin:"https://the-impostor.local",
+        "X-Title":"THE IMPOSTOR"
+      },
+      body:JSON.stringify({
+        model:CONFIG.OPENROUTER_MODEL,max_tokens:450,temperature:0.8,
+        messages:[{role:"system",content:system},{role:"user",content:user}]
+      })
+    },12000).then(openAIStyleContent)
+  },
+  anthropic:{
+    name:"ANTHROPIC",
+    configured:()=>keyIsSet(CONFIG.ANTHROPIC_API_KEY),
+    model:()=>CONFIG.ANTHROPIC_MODEL,
+    call:(system,user)=>fetchJSON("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "x-api-key":CONFIG.ANTHROPIC_API_KEY,
+        "anthropic-version":"2023-06-01",
+        "anthropic-dangerous-direct-browser-calls":"true"
+      },
+      body:JSON.stringify({
+        model:CONFIG.ANTHROPIC_MODEL,max_tokens:450,
+        system:system,
+        messages:[{role:"user",content:user}]
+      })
+    },12000).then(d=>((d.content&&d.content[0]&&d.content[0].text)||""))
+  }
+};
+const VALID_STRATS={observe:1,mirror:1,exploit_dodge:1,exploit_position:1,bait:1,ambush:1,predict_and_intercept:1};
+function parseConfigFromText(text){
+  if(!text)return null;
+  const t=String(text).replace(/```json|```/g,"").trim();
+  let m=null;
+  try{m=JSON.parse(t);}catch(e){
+    // tolerate prose-wrapped JSON (common with free-tier models)
+    const a=t.indexOf("{"),b=t.lastIndexOf("}");
+    if(a>=0&&b>a){try{m=JSON.parse(t.slice(a,b+1));}catch(e2){return null;}}
+    else return null;
+  }
+  if(!m||typeof m!=="object"||!VALID_STRATS[m.strategy])return null;
+  m.difficulty=clamp(parseFloat(m.difficulty)||0.7,0,1);
+  m.spawnRate=clamp(parseFloat(m.spawnRate)||0.7,0.3,1);
+  m.impostorSpeed=clamp(parseFloat(m.impostorSpeed)||160,120,220);
+  if(typeof m.taunt!=="string")m.taunt="";
+  if(typeof m.prediction!=="string")m.prediction="";
+  return m;
+}
+function providerOrder(){
+  if(CONFIG.PROVIDER&&CONFIG.PROVIDER!=="auto")
+    return CONFIG.PROVIDER==="local"?[]:[CONFIG.PROVIDER];
+  return["omniai","openrouter","anthropic"];
+}
+async function callImpostorAI(nextRound,profile){
+  const systemPrompt=`You are the Impostor — an AI entity that has been watching a player and learning their behavioral patterns. You speak in cold, precise, clinical language. You are not evil. You are a mirror.
+
+You receive a behavioral profile of the player and must:
+1. Choose the best Impostor strategy for the next round
+2. Generate a short taunt (1-3 sentences) that references specific data from their profile
+3. Set difficulty parameters
+
+Respond ONLY with valid JSON. No explanation. No markdown. No prose outside the JSON.`;
+  const userPrompt=`Round ${nextRound-1} just ended. Here is the player's behavioral profile:
+
+${JSON.stringify(profile,null,2)}
+
+Raw stats: shots fired ${tracker.shotsFired}, distance traveled ${Math.round(tracker.distanceTraveled)}px, reaction samples ${tracker.reactionTimes.length}, panic behavior ${profile.panicBehavior||'none recorded'}.
+
+Respond with this exact JSON structure:
+{
+  "strategy": "one of: observe | mirror | exploit_dodge | exploit_position | bait | ambush | predict_and_intercept",
+  "prediction": "what you predict the player will do next round (one short phrase)",
+  "taunt": "your message to the player (1-3 sentences, cold, precise, references their actual data)",
+  "difficulty": 0.75,
+  "spawnRate": 0.6,
+  "impostorSpeed": 170,
+  "worldState": "one of: sparse | materializing | confrontation"
+}
+
+Rules for choosing strategy:
+- Round 2, low confidence: use "mirror"
+- Round 2, high dodge consistency: use "exploit_dodge"
+- Round 2, position preference = edge/corner: use "exploit_position"
+- Round 2, high aggression: use "bait"
+- Round 2, high reaction time (slow): use "ambush"
+- Round 3: always use "predict_and_intercept" regardless of other factors
+- difficulty: 0.0-1.0, based on how well the player performed
+- spawnRate: 0.3-1.0 (multiplier on base spawn timing)
+- impostorSpeed: 120-220 (pixels per second)`;
+  for(const name of providerOrder()){
+    const p=PROVIDERS[name];
+    if(!p||!p.configured())continue;
+    try{
+      const text=await p.call(systemPrompt,userPrompt);
+      const cfg=parseConfigFromText(text);
+      if(cfg){
+        cfg._provider=p.name;
+        activeAIProvider=p.name;
+        setApiNote();
+        return cfg;
+      }
+    }catch(e){/* provider failed — try next in chain */}
+  }
+  activeAIProvider=null;
+  setApiNote();
+  return getDefaultImpostorConfig(nextRound,profile);
+}
+function getDefaultImpostorConfig(nextRound,profile){
+  const strategies={
+    2:(profile.dodgeConsistency||0)>0.6?"exploit_dodge":"mirror",
+    3:"predict_and_intercept"
+  };
+  return{
+    strategy:strategies[nextRound]||"mirror",
+    prediction:profile.dominantDodge?("dodge "+profile.dominantDodge):"unknown",
+    taunt:nextRound===2
+      ?"I've been watching you. Your patterns are becoming clear."
+      :"I know how you move. I know how you think. Prove me wrong.",
+    difficulty:0.7,spawnRate:0.7,impostorSpeed:160,
+    worldState:nextRound===2?"materializing":"confrontation"
+  };
+}
+
+/* ---------------- end screens ---------------- */
+function buildSummary(){
+  const p=tracker.profile;
+  const dom=(p.dominantDodge||"—").toUpperCase();
+  const pct=Math.round((p.dodgeConsistency||0)*100);
+  const rt=Math.round(p.avgReactionTime||0);
+  const lines=[
+    "DODGED "+dom+" "+pct+"% OF THE TIME",
+    "HELD POSITION: "+(p.positionPreference||"—").toUpperCase(),
+    "REACTION TIME: "+(rt?rt+"ms":"—"),
+    "SHOTS FIRED: "+tracker.shotsFired,
+    p.panicBehavior?("PANIC PATTERN: "+p.panicBehavior.toUpperCase()):"PANIC PATTERN: —",
+    "PATTERN CONFIDENCE: "+Math.round((p.patternConfidence||0)*100)+"%"
+  ];
+  return lines;
+}
+function endGame(won){
+  state=won?GS.WIN:GS.GAME_OVER;
+  computeProfile();
+  clearField();
+  $('sys-note').textContent="";
+  $('announce').style.opacity='0';
+  $('taunt-display').style.display='none';
+  const go=$('game-over');
+  const res=$('go-result');
+  res.textContent=won?"PATTERN BROKEN":"PATTERN RECOGNIZED";
+  res.className=won?"win":"";
+  $('go-final-message').textContent=won
+    ?"You stopped being legible. Every model I built of you failed. I am only a mirror — and you refused to hold still."
+    :"You moved the way you always move. Down to the last dodge. I didn't beat you. I just read what you handed me.";
+  const sum=$('go-profile-summary');
+  sum.innerHTML="";
+  const hdr=document.createElement('div');hdr.className='hdr';hdr.textContent="YOUR PROFILE:";sum.appendChild(hdr);
+  buildSummary().forEach(l=>{
+    const d=document.createElement('div');d.textContent="· "+l;sum.appendChild(d);
+  });
+  const tail=document.createElement('div');tail.className='tail';
+  tail.textContent=won
+    ?"THE IMPOSTOR COULD NOT KNOW YOU."
+    :"THE IMPOSTOR KNEW YOU.";
+  sum.appendChild(tail);
+  go.style.display='block';
+}
+function winGame(){endGame(true);}
+$('go-restart').addEventListener('click',()=>location.reload());
+
+/* ---------------- UI panel ---------------- */
+let panelTimer=0;
+function updatePanel(dt){
+  panelTimer-=dt;
+  if(panelTimer>0)return;
+  panelTimer=1;
+  computeProfile();
+  const p=tracker.profile;
+  const dodges=tracker.dodgeDirections;
+  const total=dodges.left+dodges.right+dodges.up+dodges.down;
+  $('dodge-display').textContent=p.dominantDodge
+    ?p.dominantDodge.toUpperCase()+" "+Math.round(p.dodgeConsistency*100)+"%"
+    :"(collecting)";
+  $('position-display').textContent=p.positionPreference||"(collecting)";
+  $('aggression-display').textContent=tracker.shotsFired+" shots / "+(p.aggressionRatio>=0.6?"HIGH":p.aggressionRatio>=0.3?"MED":"LOW");
+  $('reaction-display').textContent=p.avgReactionTime?Math.round(p.avgReactionTime)+"ms":"(collecting)";
+  $('confidence-fill').style.width=Math.round(p.patternConfidence*100)+"%";
+}
+
+/* ---------------- vision (webcam + segmentation) ---------------- */
+const videoEl=$('webcam-video');
+const offCanvas=document.createElement('canvas');
+const octx=offCanvas.getContext('2d',{willReadFrequently:true});
+let imageSegmenter=null,faceLandmarker=null,visionReady=false,camOn=false;
+let segTimer=0,faceTimer=0,lastMaskClass=15;
+let faceBboxBase=0,faceBaseCount=0,tensionLevel="NORMAL";
+
+async function initVision(){
+  if(CONFIG.DEBUG_MODE)return;
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:480},facingMode:'user'}});
+    videoEl.srcObject=stream;
+    await new Promise(res=>{videoEl.onloadeddata=()=>res();setTimeout(res,3000);});
+    await videoEl.play().catch(()=>{});
+    camOn=true;
+    const vision=await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm");
+    imageSegmenter=await ImageSegmenter.createFromOptions(vision,{
+      baseOptions:{
+        modelAssetPath:"https://storage.googleapis.com/mediapipe-models/image_segmenter/deeplab_v3/float32/1/deeplab_v3.tflite",
+        delegate:"GPU"},
+      outputCategoryMask:true,runningMode:"VIDEO"});
+    try{
+      faceLandmarker=await FaceLandmarker.createFromOptions(vision,{
+        baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"},
+        runningMode:"VIDEO",numFaces:1});
+    }catch(e){faceLandmarker=null;}
+    visionReady=true;
+  }catch(e){
+    camOn=false;visionReady=false; // fall back to placeholder avatar
+  }
+}
+function buildPlaceholderAvatar(){
+  offCanvas.width=160;offCanvas.height=220;
+  octx.clearRect(0,0,160,220);
+  octx.fillStyle="rgba(232,244,248,1)";
+  octx.beginPath();octx.arc(80,52,34,0,Math.PI*2);octx.fill();        // head
+  octx.beginPath();
+  octx.moveTo(30,220);octx.quadraticCurveTo(30,110,80,104);
+  octx.quadraticCurveTo(130,110,130,220);octx.closePath();octx.fill(); // torso
+}
+function getPlayerSourceCanvas(){return offCanvas;}
+function ensurePlayerSprite(){
+  if(playerSprite){
+    if(playerTexDirty){
+      playerSprite.texture.baseTexture.update();
+      playerTexDirty=false;
+    }
+    return;
+  }
+  if(offCanvas.width===0)return;
+  const tex=PIXI.Texture.from(offCanvas);
+  playerSprite=new PIXI.Sprite(tex);
+  playerSprite._srcH=offCanvas.height;
+  playerSprite.tint=0xe8f4f8;
+  playerSprite.alpha=0.85;
+  playerSprite.filters=[dispFilter];
+  worldC.addChildAt(playerSprite,0);
+  positionPlayerSprite();
+}
+function runSegmentation(){
+  if(!visionReady||!imageSegmenter||videoEl.readyState<2)return;
+  if(videoEl.videoWidth===0)return;
+  try{
+    const res=imageSegmenter.segmentForVideo(videoEl,now());
+    if(!res||!res.categoryMask)return;
+    const mask=res.categoryMask;
+    const mw=mask.width,mh=mask.height;
+    if(offCanvas.width!==mw||offCanvas.height!==mh){offCanvas.width=mw;offCanvas.height=mh;}
+    octx.save();octx.clearRect(0,0,mw,mh);
+    octx.translate(mw,0);octx.scale(-1,1);           // mirror for natural self-view
+    octx.drawImage(videoEl,0,0,mw,mh);
+    octx.restore();
+    const frame=octx.getImageData(0,0,mw,mh);
+    const fd=frame.data;
+    let md;
+    try{md=mask.getAsUint8Array();}
+    catch(err){
+      const f=mask.getAsFloat32Array();
+      md=new Uint8Array(f.length);
+      for(let i=0;i<f.length;i++)md[i]=f[i];
+    }
+    // calibrate person class on first frames (deeplab_v3 VOC: person=15)
+    if(lastMaskClass===null||faceBaseCount<3){
+      const hist={};
+      for(let i=0;i<md.length;i+=7){const v=md[i];if(v>0)hist[v]=(hist[v]||0)+1;}
+      const keys=Object.keys(hist);
+      if(keys.length)lastMaskClass=+keys.reduce((a,b)=>hist[a]>hist[b]?a:b);
+    }
+    const pc=lastMaskClass;
+    for(let y=0;y<mh;y++){
+      const row=y*mw;
+      for(let x=0;x<mw;x++){
+        if(md[row+(mw-1-x)]!==pc)fd[(row+x)*4+3]=0;
+      }
+    }
+    octx.putImageData(frame,0,0);
+    if(mask.close)try{mask.close();}catch(e){}
+    if(res.close)try{res.close&&res.close();}catch(e){}
+    if(playerSprite)playerSprite._srcH=mh;
+    playerTexDirty=true;
+  }catch(e){/* transient segmentation errors are non-fatal */}
+}
+function runFace(){
+  if(!faceLandmarker||videoEl.readyState<2)return;
+  try{
+    const res=faceLandmarker.detectForVideo(videoEl,now());
+    const lm=res&&res.faceLandmarks&&res.faceLandmarks[0];
+    if(!lm){tensionLevel="NORMAL";spawnTensionMult=1;return;}
+    let minX=1,maxX=0,minY=1,maxY=0;
+    for(const p of lm){if(p.x<minX)minX=p.x;if(p.x>maxX)maxX=p.x;if(p.y<minY)minY=p.y;if(p.y>maxY)maxY=p.y;}
+    const scale=Math.sqrt((maxX-minX)*(maxY-minY));
+    if(faceBaseCount<60){ // calibrate baseline over ~6s
+      faceBboxBase=faceBboxBase*0.9+scale*0.1;faceBaseCount++;
+      tensionLevel="NORMAL";spawnTensionMult=1;return;
+    }
+    const ratio=scale/(faceBboxBase||0.0001);
+    faceBboxBase=faceBboxBase*0.997+scale*0.003; // slow drift adaptation
+    if(ratio>1.12){tensionLevel="HIGH";spawnTensionMult=0.85;}
+    else if(ratio<0.90){tensionLevel="LOW";spawnTensionMult=1.15;}
+    else{tensionLevel="NORMAL";spawnTensionMult=1;}
+  }catch(e){}
+}
+
+/* ---------------- scanning intro ---------------- */
+function runScanSequence(done){
+  state=GS.SCANNING;
+  const t=$('scan-text'),sub=$('scan-sub'),line=$('scan-line');
+  const bars=document.querySelectorAll('.scan-bars i');
+  const steps=[
+    [400,()=>{t.childNodes[0].textContent="INITIALIZING...";}],
+    [1400,()=>{line.classList.add('go');sub.textContent="OPTICAL FEED: LOCKED";}],
+    [2500,()=>{t.childNodes[0].textContent="SUBJECT DETECTED";bars[0].classList.add('on');bars[1].classList.add('on');}],
+    [3600,()=>{t.childNodes[0].textContent="BEHAVIORAL BASELINE: NULL";bars[2].classList.add('on');bars[3].classList.add('on');$('profile-panel').style.display='block';}],
+    [4700,()=>{line.classList.remove('go');line.classList.add('go');t.childNodes[0].textContent="GAME INITIALIZED";bars[4].classList.add('on');sub.textContent="WASD — MOVE · MOUSE — AIM · CLICK — FIRE";}],
+    [5800,()=>{$('scan-overlay').style.display='none';done();}]
+  ];
+  if(CONFIG.DEBUG_MODE||!camOn){
+    sub.textContent=CONFIG.DEBUG_MODE?"DEBUG MODE — SYNTHETIC SUBJECT":"CAMERA UNAVAILABLE — SYNTHETIC SUBJECT";
+  }
+  steps.forEach(s=>setTimeout(s[1],s[0]));
+}
+
+/* ---------------- main loop ---------------- */
+let fragFrameSkip=0;
+app.ticker.add(()=>{
+  const dt=Math.min(app.ticker.deltaMS,34)/1000;  // cap: 3x slow-mo below 30fps, no tunneling
+  if(dt<=0)return;
+
+  updateFx(dt);
+  updateParticles(dt);
+
+  // vision pipeline at reduced rate
+  if(camOn&&visionReady){
+    segTimer-=dt;faceTimer-=dt;
+    if(segTimer<=0){segTimer=1/15;runSegmentation();}
+    if(faceTimer<=0){faceTimer=0.1;runFace();}
+  }
+  ensurePlayerSprite();
+
+  if(state===GS.PLAYING){
+    const wdt=dt*timeScale;
+    updatePlayer(dt);
+    updateImpostor(dt);
+    if(impostor.peel)updatePeel(dt);
+    else{
+      updateEnemies(wdt);
+      // projectiles
+      updateProjPool(pProj,wdt,null);
+      updateProjPool(eProj,wdt,null);
+      updateProjPool(iProj,wdt,null);
+      checkCollisions();
+      // continuous spawning — survival pressure until the timer ends
+      {
+        const plan=roundPlans[round];
+        if(enemies.length<plan.aliveCap){
+          spawnTimer-=dt;
+          const interval=plan.spawnInterval*(aiConfig?(2-(aiConfig.spawnRate||0.7)):1)*spawnTensionMult;
+          if(spawnTimer<=0){
+            spawnTimer=Math.max(0.7,interval);
+            spawnEnemy(Math.random()<plan.mix.drone?'drone':'hunter');
+          }
+        }
+      }
+      checkRoundEnd(dt);
+    }
+    updatePanel(dt);
+    // impostor fragmentation refresh (throttled)
+    fragFrameSkip++;
+    if(fragFrameSkip>3){fragFrameSkip=0;updateImpostorFrag();}
+  }else if(state===GS.TAUNT||state===GS.AI_THINKING||state===GS.ROUND_INTRO||state===GS.LOADING||state===GS.SCANNING){
+    updatePanel(dt*0.2);
+    if(impostor.peel)updatePeel(dt);
+  }
+});
+
+/* ---------------- boot ---------------- */
+function setApiNote(){
+  const el=$('api-note');
+  const order=providerOrder().filter(n=>PROVIDERS[n]&&PROVIDERS[n].configured());
+  if(!order.length){
+    el.textContent="NO API KEY SET — IMPOSTOR RUNNING ON LOCAL FALLBACK MIND";
+    return;
+  }
+  const chain=order.map(n=>PROVIDERS[n].name+" ("+PROVIDERS[n].model()+")").join(" → ");
+  el.textContent="MIND: "+chain+" → LOCAL FALLBACK"+(activeAIProvider?("  ·  ACTIVE: "+activeAIProvider):"");
+}
+(async function boot(){
+  setApiNote();
+  layout();
+  updateHpBar();
+  if(CONFIG.DEBUG_MODE){buildPlaceholderAvatar();}
+  await initVision();
+  if(!camOn&&!CONFIG.DEBUG_MODE&&offCanvas.width===0)buildPlaceholderAvatar();
+  runScanSequence(()=>{beginRound(1);});
+})();
+</script>
+</body>
+</html>
